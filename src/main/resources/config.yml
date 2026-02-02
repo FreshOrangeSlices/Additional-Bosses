@@ -196,3 +196,28 @@ raffle:
   pool:
     good_weight: 70
     curse_weight: 30
+
+  # === IMPORTANT: effect IDs that can be rolled ===
+  # These MUST match your RaffleEffectId enum names.
+  effects:
+    # GOOD
+    - VITALITY
+    - IRON_WILL
+    - BLOOD_MENDING
+    - SKYBOUND
+    - EMBER_WARD
+    - SIGHTBEYOND
+    - TIDEBOUND
+    - OCEAN_GRACE
+    - FORTUNE
+    - VILLAGER_FAVOR
+    - GECKO_GRIP
+
+    # CURSES (implemented)
+    - DREAD
+    - TERROR
+    - ECHOES
+    - DISARRAY
+    - MATADOR
+    - MOTHER_HEN
+    - REDUCTION
