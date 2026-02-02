@@ -74,7 +74,7 @@ public final class RaffleCustomEffectEngine {
     public void start() {
         stop();
 
-        // Slow scan: discover active effects (every 2s, unchanged)
+        // Slow scan: discover active effects (every 2s)
         scanTask = plugin.getServer().getScheduler().runTaskTimer(
                 plugin,
                 () -> plugin.getServer().getOnlinePlayers().forEach(this::refreshPlayer),
@@ -124,6 +124,14 @@ public final class RaffleCustomEffectEngine {
         }
 
         activeByPlayer.clear();
+    }
+
+    /**
+     * Public "poke" for event-driven updates later (join/equip/respawn/etc).
+     * Safe to call anytime.
+     */
+    public void refreshPlayerNow(Player player) {
+        refreshPlayer(player);
     }
 
     private void refreshPlayer(Player player) {
