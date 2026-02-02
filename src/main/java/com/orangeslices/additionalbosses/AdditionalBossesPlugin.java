@@ -1,6 +1,8 @@
 package com.orangeslices.additionalbosses;
 
 import com.orangeslices.additionalbosses.bosses.BossApplier;
+import com.orangeslices.additionalbosses.bosses.BossHealthBarManager;
+import com.orangeslices.additionalbosses.bosses.listeners.BossBarCombatListener;
 import com.orangeslices.additionalbosses.bosses.listeners.BossCombatListener;
 import com.orangeslices.additionalbosses.bosses.listeners.BossDropListener;
 import com.orangeslices.additionalbosses.bosses.listeners.SpawnBossListener;
@@ -13,8 +15,8 @@ import com.orangeslices.additionalbosses.raffle.RafflePool;
 import com.orangeslices.additionalbosses.raffle.RaffleService;
 import com.orangeslices.additionalbosses.raffle.RaffleTokenFactory;
 import com.orangeslices.additionalbosses.raffle.effects.RafflePotionEngine;
-import com.orangeslices.additionalbosses.raffle.effects.custom.RaffleCustomEffectEngine;
 import com.orangeslices.additionalbosses.raffle.effects.custom.MatadorKnockbackListener;
+import com.orangeslices.additionalbosses.raffle.effects.custom.RaffleCustomEffectEngine;
 import org.bukkit.ChatColor;
 import org.bukkit.Location;
 import org.bukkit.NamespacedKey;
@@ -35,6 +37,11 @@ public final class AdditionalBossesPlugin extends JavaPlugin {
     // ===============================
     private NamespacedKey bossKey;
     private BossApplier bossApplier;
+
+    // ===============================
+    // Bossbar system
+    // ===============================
+    private BossHealthBarManager bossHealthBars;
 
     // ===============================
     // Raffle system core
@@ -79,6 +86,11 @@ public final class AdditionalBossesPlugin extends JavaPlugin {
         bossApplier = new BossApplier(this);
 
         // -------------------------
+        // Bossbar init
+        // -------------------------
+        bossHealthBars = new BossHealthBarManager(this, bossApplier);
+
+        // -------------------------
         // Raffle init
         // -------------------------
         RaffleKeys.init(this);
@@ -114,14 +126,14 @@ public final class AdditionalBossesPlugin extends JavaPlugin {
         getServer().getPluginManager().registerEvents(new BossCombatListener(this), this);
         getServer().getPluginManager().registerEvents(new BossDropListener(this), this);
 
+        // Bossbar combat trigger (combat-only bossbar)
+        getServer().getPluginManager().registerEvents(new BossBarCombatListener(this), this);
+
         // Kits apply (sneak + right click)
         getServer().getPluginManager().registerEvents(new KitApplyListener(this), this);
 
         // Matador knockback (custom curse support)
-        getServer().getPluginManager().registerEvents(
-                new MatadorKnockbackListener(this),
-                this
-        );
+        getServer().getPluginManager().registerEvents(new MatadorKnockbackListener(this), this);
 
         // -------------------------
         // Command
@@ -135,6 +147,12 @@ public final class AdditionalBossesPlugin extends JavaPlugin {
 
     @Override
     public void onDisable() {
+        // Stop bossbars first (removes from players)
+        if (bossHealthBars != null) {
+            bossHealthBars.stopAll();
+            bossHealthBars = null;
+        }
+
         if (raffleCustomEffectEngine != null) {
             raffleCustomEffectEngine.stop();
             raffleCustomEffectEngine = null;
@@ -163,6 +181,10 @@ public final class AdditionalBossesPlugin extends JavaPlugin {
 
     public BossApplier bossApplier() {
         return bossApplier;
+    }
+
+    public BossHealthBarManager bossHealthBars() {
+        return bossHealthBars;
     }
 
     // ===============================
@@ -219,6 +241,7 @@ public final class AdditionalBossesPlugin extends JavaPlugin {
                     net.md_5.bungee.api.chat.TextComponent.fromLegacyText(coloredMessage)
             );
         } catch (Throwable t) {
+            // Fallback
             player.sendMessage(coloredMessage);
         }
     }
@@ -235,6 +258,11 @@ public final class AdditionalBossesPlugin extends JavaPlugin {
         if (spawnBossListener != null) {
             spawnBossListener.onBossCreated(boss);
         }
+
+        // Track for bossbar system (combat-only bar will not show until combat happens)
+        if (bossHealthBars != null) {
+            bossHealthBars.trackBoss(boss);
+        }
     }
 
     public void onBossRemoved(LivingEntity boss) {
@@ -243,6 +271,10 @@ public final class AdditionalBossesPlugin extends JavaPlugin {
         UUID w = boss.getWorld().getUID();
         activeBossesByWorld.compute(w, (k, v) -> Math.max(0, (v == null ? 0 : v) - 1));
         cancelBossDespawn(boss.getUniqueId());
+
+        if (bossHealthBars != null) {
+            bossHealthBars.stopFor(boss);
+        }
     }
 
     public int activeBossesInWorld(World world) {
