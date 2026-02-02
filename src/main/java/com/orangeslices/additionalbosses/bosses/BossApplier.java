@@ -38,31 +38,39 @@ public final class BossApplier {
        ------------------------- */
 
     public boolean isBoss(LivingEntity entity) {
+        if (entity == null) return false;
         Byte val = entity.getPersistentDataContainer().get(bossKey, PersistentDataType.BYTE);
         return val != null && val == (byte) 1;
     }
 
     public void markBoss(LivingEntity entity) {
+        if (entity == null) return;
         entity.getPersistentDataContainer().set(bossKey, PersistentDataType.BYTE, (byte) 1);
     }
 
     public void unmarkBoss(LivingEntity entity) {
+        if (entity == null) return;
         entity.getPersistentDataContainer().remove(bossKey);
     }
 
     public String getRank(LivingEntity entity) {
+        if (entity == null) return null;
         return entity.getPersistentDataContainer().get(rankKey, PersistentDataType.STRING);
     }
 
     public String getAffixesString(LivingEntity entity) {
+        if (entity == null) return null;
         return entity.getPersistentDataContainer().get(affixesKey, PersistentDataType.STRING);
     }
 
     public String getTitle(LivingEntity entity) {
+        if (entity == null) return null;
         return entity.getPersistentDataContainer().get(titleKey, PersistentDataType.STRING);
     }
 
     public void setRank(LivingEntity entity, String rank) {
+        if (entity == null) return;
+
         if (rank == null || rank.isBlank()) {
             entity.getPersistentDataContainer().remove(rankKey);
             return;
@@ -75,6 +83,8 @@ public final class BossApplier {
     }
 
     public void setAffixes(LivingEntity entity, List<String> affixes) {
+        if (entity == null) return;
+
         PersistentDataContainer pdc = entity.getPersistentDataContainer();
 
         if (affixes == null || affixes.isEmpty()) {
@@ -105,6 +115,7 @@ public final class BossApplier {
        ------------------------- */
 
     public void apply(LivingEntity entity) {
+        if (entity == null) return;
         if (isBoss(entity)) return; // prevent double-apply
 
         // 1) Rank
@@ -206,7 +217,11 @@ public final class BossApplier {
         List<String> words = new ArrayList<>(2);
 
         for (String a : affixes) {
-            String word = plugin.getConfig().getString("affix_titles." + a, "");
+            if (a == null) continue;
+            String id = a.trim().toLowerCase(Locale.ROOT);
+            if (id.isEmpty()) continue;
+
+            String word = plugin.getConfig().getString("affix_titles." + id, "");
             if (word != null && !word.isBlank()) {
                 words.add(word.trim());
             }
@@ -278,15 +293,41 @@ public final class BossApplier {
         List<Map.Entry<String, Integer>> entries = new ArrayList<>();
         for (String id : pool.getKeys(false)) {
             int w = Math.max(0, pool.getInt(id + ".weight", 1));
-            if (w > 0) entries.add(Map.entry(id.toLowerCase(Locale.ROOT), w));
+            if (w > 0) entries.add(Map.entry(id.trim().toLowerCase(Locale.ROOT), w));
         }
 
-        List<String> chosen = new ArrayList<>();
-        for (int i = 0; i < max && !entries.isEmpty(); i++) {
-            int total = entries.stream().mapToInt(Map.Entry::getValue).sum();
-            int roll = ThreadLocalRandom.current().nextInt(total);
+        if (entries.isEmpty()) return;
 
+        List<String> chosen = new ArrayList<>();
+
+        for (int i = 0; i < max && !entries.isEmpty(); i++) {
+            int total = 0;
+            for (var e : entries) total += Math.max(0, e.getValue());
+            if (total <= 0) break;
+
+            int roll = ThreadLocalRandom.current().nextInt(total);
             int running = 0;
+
+            int pickedIndex = -1;
             for (int idx = 0; idx < entries.size(); idx++) {
-                running += entries.get(idx).getValue();
-                if (roll <
+                running += Math.max(0, entries.get(idx).getValue());
+                if (roll < running) {
+                    pickedIndex = idx;
+                    break;
+                }
+            }
+
+            if (pickedIndex < 0) pickedIndex = entries.size() - 1;
+
+            String picked = entries.get(pickedIndex).getKey();
+            chosen.add(picked);
+
+            // Remove picked so we don't duplicate affixes
+            entries.remove(pickedIndex);
+        }
+
+        if (!chosen.isEmpty()) {
+            setAffixes(entity, chosen);
+        }
+    }
+}
