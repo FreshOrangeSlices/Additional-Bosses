@@ -5,7 +5,7 @@ import com.orangeslices.additionalbosses.bosses.listeners.BossCombatListener;
 import com.orangeslices.additionalbosses.bosses.listeners.BossDropListener;
 import com.orangeslices.additionalbosses.bosses.listeners.SpawnBossListener;
 import com.orangeslices.additionalbosses.commands.BecCommand;
-import com.orangeslices.additionalbosses.kits.PotionAddOnListener;
+import com.orangeslices.additionalbosses.kits.listeners.KitApplyListener;
 import com.orangeslices.additionalbosses.raffle.RaffleApplyListener;
 import com.orangeslices.additionalbosses.raffle.RaffleDebug;
 import com.orangeslices.additionalbosses.raffle.RaffleKeys;
@@ -53,11 +53,6 @@ public final class AdditionalBossesPlugin extends JavaPlugin {
     private final Map<UUID, Integer> activeBossesByWorld = new ConcurrentHashMap<>();
     private final Map<UUID, BukkitTask> despawnTasks = new ConcurrentHashMap<>();
 
-    // ===============================
-    // Legacy (optional) kit system
-    // ===============================
-    private PotionAddOnListener potionAddOnListener;
-
     // Listener reference (spawn uses callbacks)
     private SpawnBossListener spawnBossListener;
 
@@ -72,7 +67,7 @@ public final class AdditionalBossesPlugin extends JavaPlugin {
 
     @Override
     public void onEnable() {
-        // We’re doing config LAST, but this is safe even if config is empty.
+        // Config LAST, but safe even if config is empty.
         saveDefaultConfig();
         reloadConfig();
 
@@ -92,7 +87,6 @@ public final class AdditionalBossesPlugin extends JavaPlugin {
         RaffleDebug.setEnabled(getConfig().getBoolean(CFG_RAFFLE_DEBUG, false));
 
         rafflePool = new RafflePool(this);
-        // If config is minimal, the pool should still have safe defaults internally.
         rafflePool.reloadFromConfig();
 
         raffleService = new RaffleService(rafflePool);
@@ -111,17 +105,16 @@ public final class AdditionalBossesPlugin extends JavaPlugin {
         // -------------------------
         spawnBossListener = new SpawnBossListener(this);
 
+        // Raffle apply (armor system)
         getServer().getPluginManager().registerEvents(new RaffleApplyListener(this), this);
+
+        // Boss system
         getServer().getPluginManager().registerEvents(spawnBossListener, this);
         getServer().getPluginManager().registerEvents(new BossCombatListener(this), this);
         getServer().getPluginManager().registerEvents(new BossDropListener(this), this);
 
-        // -------------------------
-        // Legacy kits / potion add-ons (optional)
-        // -------------------------
-        potionAddOnListener = new PotionAddOnListener(this);
-        getServer().getPluginManager().registerEvents(potionAddOnListener, this);
-        potionAddOnListener.start();
+        // Kits apply (sneak + right click)
+        getServer().getPluginManager().registerEvents(new KitApplyListener(this), this);
 
         // -------------------------
         // Command
@@ -143,11 +136,6 @@ public final class AdditionalBossesPlugin extends JavaPlugin {
         if (rafflePotionEngine != null) {
             rafflePotionEngine.stop();
             rafflePotionEngine = null;
-        }
-
-        if (potionAddOnListener != null) {
-            potionAddOnListener.stop();
-            potionAddOnListener = null;
         }
 
         for (UUID id : despawnTasks.keySet()) {
@@ -224,7 +212,7 @@ public final class AdditionalBossesPlugin extends JavaPlugin {
                     net.md_5.bungee.api.chat.TextComponent.fromLegacyText(coloredMessage)
             );
         } catch (Throwable t) {
-            // Fallback (older builds / forks)
+            // Fallback
             player.sendMessage(coloredMessage);
         }
     }
