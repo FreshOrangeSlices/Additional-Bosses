@@ -5,7 +5,9 @@ import org.bukkit.ChatColor;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
+import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityDeathEvent;
 
 public final class BossCombatListener implements Listener {
@@ -14,6 +16,19 @@ public final class BossCombatListener implements Listener {
 
     public BossCombatListener(AdditionalBossesPlugin plugin) {
         this.plugin = plugin;
+    }
+
+    /**
+     * Marks combat so bossbars show (combat_only mode).
+     * This triggers when the boss is damaged by something (player/mob/projectile owner, etc).
+     */
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onBossDamaged(EntityDamageByEntityEvent event) {
+        if (!(event.getEntity() instanceof LivingEntity boss)) return;
+        if (!plugin.bossApplier().isBoss(boss)) return;
+
+        // If your getter name differs, rename bossHealthBarManager() accordingly.
+        plugin.bossHealthBarManager().markInCombat(boss);
     }
 
     @EventHandler
