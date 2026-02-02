@@ -1,0 +1,16 @@
+name: Additional-Bosses
+version: 0.1.0
+main: com.orangeslices.additionalbosses.AdditionalBossesPlugin
+api-version: '1.21'
+author: OrangeSlices
+description: Rare boss-like encounters and add-ons (clean rebuild).
+
+commands:
+  bec:
+    description: Admin command for Additional-Bosses
+    usage: /bec
+    permission: additionalbosses.admin
+
+permissions:
+  additionalbosses.admin:
+    default: op
