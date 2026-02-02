@@ -18,7 +18,7 @@ public final class BossCombatListener implements Listener {
 
     @EventHandler
     public void onBossDeath(EntityDeathEvent event) {
-        if (!(event.getEntity() instanceof LivingEntity boss)) return;
+        LivingEntity boss = event.getEntity();
         if (!plugin.bossApplier().isBoss(boss)) return;
 
         // Cancel any pending despawn
@@ -59,6 +59,9 @@ public final class BossCombatListener implements Listener {
                     formatDeathMessage(boss, format)
             );
         }
+
+        // IMPORTANT: keep boss tracking + bossbar cleanup accurate
+        plugin.onBossRemoved(boss);
     }
 
     private String formatDeathMessage(LivingEntity boss, String format) {
