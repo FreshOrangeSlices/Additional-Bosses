@@ -67,20 +67,30 @@ boss:
 # ===============================
 bossbar:
   enabled: true
+
+  # Only show bar while boss is in combat
   combat_only: true
   combat_window_ms: 12000
+
+  # Player visibility range
   radius: 40
+
+  # How often HP + title update (ticks)
   update_ticks: 10
 
+  # NEW: how often nearby players are re-evaluated (ticks)
+  # Higher = less CPU, slower join/leave reaction
+  viewer_update_ticks: 20
+
   # defaults (rank can override)
-  color: "PURPLE"            # PINK, BLUE, RED, GREEN, YELLOW, PURPLE, WHITE
-  style: "SOLID"             # SOLID, SEGMENTED_6, SEGMENTED_10, SEGMENTED_12, SEGMENTED_20
+  color: "PURPLE"
+  style: "SOLID"
 
   title_format: "&6{rank_color}{title}{mob} &7[{affixes}]"
   max_affixes_shown: 3
 
 # ===============================
-# Rewards (XP is handled in BossCombatListener)
+# Rewards
 # ===============================
 rewards:
   xp_multiplier: 1.0
@@ -138,7 +148,6 @@ affixes:
   enabled: true
   max_per_boss: 2
 
-  # Weighted pool (IDs must match what your code writes into PDC)
   pool:
     lifesteal:
       weight: 4
@@ -156,7 +165,6 @@ affixes:
       weight: 4
       name: "Thorned"
 
-# Boss title words mapped from affix IDs
 affix_titles:
   lifesteal: "Vampiric"
   swift: "Fleet"
@@ -168,7 +176,6 @@ affix_titles:
 # ===============================
 raffle:
   debug: false
-
   max_slots_per_armor: 4
 
   require_token_mainhand: true
@@ -191,16 +198,11 @@ raffle:
       volume: 0.7
       pitch: 0.9
 
-  # Chance weighting for rolling effects (RafflePool reads this)
-  # Keep it simple for now: GOOD effects more common than CURSES.
   pool:
     good_weight: 70
     curse_weight: 30
 
-  # === IMPORTANT: effect IDs that can be rolled ===
-  # These MUST match your RaffleEffectId enum names.
   effects:
-    # GOOD
     - VITALITY
     - IRON_WILL
     - BLOOD_MENDING
@@ -212,8 +214,6 @@ raffle:
     - FORTUNE
     - VILLAGER_FAVOR
     - GECKO_GRIP
-
-    # CURSES (implemented)
     - DREAD
     - TERROR
     - ECHOES
