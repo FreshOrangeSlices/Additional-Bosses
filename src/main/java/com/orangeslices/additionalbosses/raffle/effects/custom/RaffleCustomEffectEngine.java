@@ -53,7 +53,10 @@ public final class RaffleCustomEffectEngine {
         register(new DreadEffect());
 
         register(new GeckoGripEffect());
-        register(new EchoesEffect());
+
+        // FIX: Echoes now uses plugin-owned scheduling + player-local sound
+        register(new EchoesEffect(plugin));
+
         register(new DisarrayEffect());
         register(new MatadorEffect());
 
@@ -178,4 +181,30 @@ public final class RaffleCustomEffectEngine {
         Map<RaffleEffectId, Integer> map = RaffleEffectReader.readFromItem(armor);
 
         // Defensive curse slot rules
-        for (Iterator<Map.Entry<RaffleEffectId, Integer>> it = map.entrySet().iterator(); it
+        for (Iterator<Map.Entry<RaffleEffectId, Integer>> it = map.entrySet().iterator(); it.hasNext(); ) {
+            Map.Entry<RaffleEffectId, Integer> e = it.next();
+
+            if (e.getKey().isCurse() && !isCurseCompatibleWithSlot(e.getKey(), slot)) {
+                it.remove();
+            }
+        }
+
+        RaffleEffectReader.mergeHighest(into, map);
+    }
+
+    /**
+     * Defensive curse slot rules.
+     * Must mirror RaffleService.
+     */
+    private boolean isCurseCompatibleWithSlot(RaffleEffectId id, EquipmentSlot slot) {
+        if (id == null || slot == null) return false;
+
+        return switch (id) {
+            case TERROR, REDUCTION -> slot == EquipmentSlot.HEAD;
+            case DREAD -> slot == EquipmentSlot.CHEST;
+            case MOTHER_HEN -> slot == EquipmentSlot.LEGS;
+            case MATADOR -> slot == EquipmentSlot.FEET;
+            default -> false;
+        };
+    }
+}
