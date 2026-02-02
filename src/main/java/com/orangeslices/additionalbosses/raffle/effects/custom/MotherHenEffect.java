@@ -7,6 +7,7 @@ import org.bukkit.Sound;
 import org.bukkit.entity.Chicken;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
+import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitTask;
 import org.bukkit.util.Vector;
 
@@ -33,10 +34,20 @@ public final class MotherHenEffect implements RaffleCustomEffect {
     private static final double TELEPORT_IF_FAR = 10.0;
     private static final double STOP_DISTANCE = 1.6;
 
+    // squared thresholds (avoid sqrt)
+    private static final double TELEPORT_IF_FAR_SQ = TELEPORT_IF_FAR * TELEPORT_IF_FAR;
+    private static final double STOP_DISTANCE_SQ = STOP_DISTANCE * STOP_DISTANCE;
+
+    private final JavaPlugin plugin;
+
     private final Map<UUID, List<Entity>> spawned = new ConcurrentHashMap<>();
     private final Map<UUID, BukkitTask> despawnTasks = new ConcurrentHashMap<>();
     private final Map<UUID, BukkitTask> followTasks = new ConcurrentHashMap<>();
     private final Map<UUID, BukkitTask> spawnTasks = new ConcurrentHashMap<>();
+
+    public MotherHenEffect(JavaPlugin plugin) {
+        this.plugin = Objects.requireNonNull(plugin, "plugin");
+    }
 
     @Override
     public RaffleEffectId getId() {
@@ -67,7 +78,7 @@ public final class MotherHenEffect implements RaffleCustomEffect {
 
         // Spawn chicks gradually
         BukkitTask spawnTask = Bukkit.getScheduler().runTaskTimer(
-                Bukkit.getPluginManager().getPlugins()[0],
+                plugin,
                 new Runnable() {
                     int i = 0;
 
@@ -111,7 +122,7 @@ public final class MotherHenEffect implements RaffleCustomEffect {
 
         // Follow + face task
         BukkitTask followTask = Bukkit.getScheduler().runTaskTimer(
-                Bukkit.getPluginManager().getPlugins()[0],
+                plugin,
                 () -> {
                     if (!player.isOnline()) return;
 
@@ -129,10 +140,10 @@ public final class MotherHenEffect implements RaffleCustomEffect {
                         }
 
                         Location cLoc = chick.getLocation();
-                        double dist = cLoc.distance(pLoc);
+                        double distSq = cLoc.distanceSquared(pLoc);
 
                         // Teleport back if too far
-                        if (dist > TELEPORT_IF_FAR) {
+                        if (distSq > TELEPORT_IF_FAR_SQ) {
                             chick.teleport(
                                     pLoc.clone().add(
                                             random(-1.5, 1.5),
@@ -146,7 +157,7 @@ public final class MotherHenEffect implements RaffleCustomEffect {
                         // Rotate to face player
                         faceEntity(chick, pLoc);
 
-                        if (dist <= STOP_DISTANCE) continue;
+                        if (distSq <= STOP_DISTANCE_SQ) continue;
 
                         Vector dir = pLoc.toVector().subtract(cLoc.toVector()).setY(0);
                         if (dir.lengthSquared() < 0.001) continue;
@@ -164,7 +175,7 @@ public final class MotherHenEffect implements RaffleCustomEffect {
 
         // Auto cleanup
         BukkitTask despawn = Bukkit.getScheduler().runTaskLater(
-                Bukkit.getPluginManager().getPlugins()[0],
+                plugin,
                 () -> cleanup(id),
                 DESPAWN_TICKS
         );
