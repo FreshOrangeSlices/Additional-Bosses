@@ -5,6 +5,7 @@ import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Sound;
 import org.bukkit.entity.Player;
+import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitTask;
 
 import java.util.Map;
@@ -43,12 +44,16 @@ public final class EchoesEffect implements RaffleCustomEffect {
         UUID id = player.getUniqueId();
         if (tasks.containsKey(id)) return; // already active
 
+        JavaPlugin plugin = JavaPlugin.getProvidingPlugin(getClass());
+
         BukkitTask task = Bukkit.getScheduler().runTaskTimer(
-                Bukkit.getPluginManager().getPlugins()[0],
+                plugin,
                 () -> {
                     Player p = Bukkit.getPlayer(id);
                     if (p == null || !p.isOnline()) {
-                        clear(player);
+                        // stop if player is gone
+                        BukkitTask t = tasks.remove(id);
+                        if (t != null) t.cancel();
                         return;
                     }
 
@@ -77,7 +82,7 @@ public final class EchoesEffect implements RaffleCustomEffect {
 
         // Auto-stop after duration
         Bukkit.getScheduler().runTaskLater(
-                Bukkit.getPluginManager().getPlugins()[0],
+                plugin,
                 () -> {
                     Player p = Bukkit.getPlayer(id);
                     if (p != null) clear(p);
