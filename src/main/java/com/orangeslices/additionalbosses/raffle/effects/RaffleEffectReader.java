@@ -3,6 +3,7 @@ package com.orangeslices.additionalbosses.raffle.effects;
 import com.orangeslices.additionalbosses.raffle.RaffleEffectId;
 import com.orangeslices.additionalbosses.raffle.RaffleKeys;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.persistence.PersistentDataContainer;
 import org.bukkit.persistence.PersistentDataType;
 
@@ -22,15 +23,20 @@ public final class RaffleEffectReader {
 
     private RaffleEffectReader() {}
 
+    // Optional safety clamp (prevents corrupted tokens from going insane)
+    private static final int MAX_LEVEL = 10;
+
     /**
      * Reads effects from an item into a map.
      */
     public static Map<RaffleEffectId, Integer> readFromItem(ItemStack item) {
         Map<RaffleEffectId, Integer> map = new EnumMap<>(RaffleEffectId.class);
         if (item == null) return map;
-        if (item.getItemMeta() == null) return map;
 
-        PersistentDataContainer pdc = item.getItemMeta().getPersistentDataContainer();
+        ItemMeta meta = item.getItemMeta();
+        if (meta == null) return map;
+
+        PersistentDataContainer pdc = meta.getPersistentDataContainer();
 
         // Stored as "ID:level,ID:level"
         String raw = pdc.get(RaffleKeys.EFFECTS, PersistentDataType.STRING);
@@ -38,15 +44,20 @@ public final class RaffleEffectReader {
 
         String[] parts = raw.split(",");
         for (String part : parts) {
-            String[] kv = part.split(":");
+            if (part == null) continue;
+
+            String trimmed = part.trim();
+            if (trimmed.isEmpty()) continue;
+
+            String[] kv = trimmed.split(":", 2);
             if (kv.length != 2) continue;
 
-            RaffleEffectId id = RaffleEffectId.fromString(kv[0]);
+            RaffleEffectId id = RaffleEffectId.fromString(kv[0].trim());
             if (id == null) continue;
 
             int level;
             try {
-                level = Integer.parseInt(kv[1]);
+                level = Integer.parseInt(kv[1].trim());
             } catch (NumberFormatException ex) {
                 continue;
             }
@@ -56,6 +67,9 @@ public final class RaffleEffectReader {
             // Clamp non-leveling effects
             if (!id.canLevel()) {
                 level = 1;
+            } else {
+                // safety clamp (optional but recommended)
+                level = Math.min(level, MAX_LEVEL);
             }
 
             map.merge(id, level, Math::max);
@@ -80,6 +94,8 @@ public final class RaffleEffectReader {
 
             if (!id.canLevel()) {
                 level = 1;
+            } else {
+                level = Math.min(level, MAX_LEVEL);
             }
 
             target.merge(id, level, Math::max);
