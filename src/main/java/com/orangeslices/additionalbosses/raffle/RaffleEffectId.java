@@ -26,7 +26,7 @@ public enum RaffleEffectId {
     TIDEBOUND(false, false),      // Conduit Power (HELMET only)
     OCEAN_GRACE(false, false),    // Dolphin's Grace (BOOTS only)
 
-    FORTUNE(false, false),        // Luck (HELMENT only)
+    FORTUNE(false, false),        // Luck (LEGGINGS only)
     VILLAGER_FAVOR(false, false), // Hero of the Village (CHEST only)
 
     GECKO_GRIP(false, false),     // Wall Climb (BOOTS only)
@@ -35,13 +35,15 @@ public enum RaffleEffectId {
     // CURSES (non-leveling)
     // -------------------------
     DREAD(true, false),
-    MISSTEP(true, false),
-    TERROR(true, false),
 
+    // BENCHED (not rolled / not registered)
+    MISSTEP(true, false),
     UNEASE(true, false),
+    ON_ALL_FOURS(true, false),
+
+    TERROR(true, false),
     ECHOES(true, false),
     DISARRAY(true, false),
-    ON_ALL_FOURS(true, false),
     MATADOR(true, false),
     MOTHER_HEN(true, false),
     IMPOSTER(true, false),
@@ -99,6 +101,11 @@ public enum RaffleEffectId {
 
             // Wall climb aliases
             case "WALL_CLIMB", "WALLCLIMB", "GECKO" -> key = "GECKO_GRIP";
+
+            // Some common legacy spellings for curses
+            case "MOTHERHEN", "MOTHER_HEN_EFFECT" -> key = "MOTHER_HEN";
+            case "ONALLFOURS", "ON_ALL_FOUR", "ON_ALL_FOURS_EFFECT" -> key = "ON_ALL_FOURS";
+            case "VILLAGERFAVOR", "HERO_VILLAGE", "HERO_OF_VILLAGE" -> key = "VILLAGER_FAVOR";
         }
 
         try {
