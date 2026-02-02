@@ -66,6 +66,7 @@ public final class RaffleApplyListener implements Listener {
 
         ItemStack token;
         ItemStack armor;
+        EquipmentSlot tokenSlot;
 
         if (requireTokenMainhand) {
             if (!mainIsToken) {
@@ -73,14 +74,34 @@ public final class RaffleApplyListener implements Listener {
                 return;
             }
             token = main;
+            tokenSlot = EquipmentSlot.HAND;
+
             armor = off;
+            if (requireArmorOffhand) {
+                // Explicit: armor must be offhand
+                // (if main hand token is required, this is already true structurally)
+            }
         } else {
             if (mainIsToken && offIsToken) {
                 fail(player, cfg, "Hold armor in one hand and the token in the other.");
                 return;
             }
-            token = mainIsToken ? main : off;
-            armor = mainIsToken ? off : main;
+
+            if (mainIsToken) {
+                token = main;
+                tokenSlot = EquipmentSlot.HAND;
+                armor = off;
+            } else {
+                token = off;
+                tokenSlot = EquipmentSlot.OFF_HAND;
+                armor = main;
+            }
+
+            if (requireArmorOffhand && tokenSlot == EquipmentSlot.OFF_HAND) {
+                // If armor must be offhand but token is offhand, fail
+                fail(player, cfg, "Hold armor in your offhand.");
+                return;
+            }
         }
 
         if (armor == null || armor.getType() == Material.AIR) {
@@ -105,7 +126,7 @@ public final class RaffleApplyListener implements Listener {
         }
 
         RaffleLoreUtil.updateLore(armor, maxSlots);
-        consumeToken(player, token);
+        decrement(player, tokenSlot);
 
         String success = cfg.getString(
                 "raffle.message.success",
@@ -113,22 +134,14 @@ public final class RaffleApplyListener implements Listener {
         );
         player.sendMessage(color(success));
         playSuccessSound(player, cfg);
+
+        // Helps prevent rare client-side ghost items (especially with Bedrock/Geyser)
+        player.updateInventory();
     }
 
     /* =========================
        Helpers
        ========================= */
-
-    private void consumeToken(Player player, ItemStack tokenRef) {
-        ItemStack main = player.getInventory().getItemInMainHand();
-        ItemStack off = player.getInventory().getItemInOffHand();
-
-        if (tokenRef == main) {
-            decrement(player, EquipmentSlot.HAND);
-        } else if (tokenRef == off) {
-            decrement(player, EquipmentSlot.OFF_HAND);
-        }
-    }
 
     private void decrement(Player player, EquipmentSlot slot) {
         ItemStack stack = (slot == EquipmentSlot.HAND)
