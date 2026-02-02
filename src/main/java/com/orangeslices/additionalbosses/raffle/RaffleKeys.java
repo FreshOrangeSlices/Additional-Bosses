@@ -13,6 +13,7 @@ public final class RaffleKeys {
 
     public static NamespacedKey EFFECTS;     // stored effects + levels
     public static NamespacedKey SLOT_COUNT;  // how many slots are used
+    public static NamespacedKey TOKEN_MARKER; // optional: marks an item as a raffle token (byte=1)
 
     /**
      * Must be called once during plugin startup.
@@ -22,8 +23,12 @@ public final class RaffleKeys {
             throw new IllegalArgumentException("Plugin cannot be null when initializing RaffleKeys.");
         }
 
+        // Idempotent init
+        if (EFFECTS != null && SLOT_COUNT != null) return;
+
         EFFECTS = new NamespacedKey(plugin, "raffle_effects");
         SLOT_COUNT = new NamespacedKey(plugin, "raffle_slots");
+        TOKEN_MARKER = new NamespacedKey(plugin, "raffle_token");
     }
 
     /**
