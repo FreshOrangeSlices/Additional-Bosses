@@ -46,11 +46,14 @@ public final class RaffleCustomEffectEngine {
         // register(new MisstepEffect());
         // register(new UneaseEffect());
 
-        register(new GeckoGripEffect());
+        register(new GeckoGripEffect()); // leave as-is unless you add a plugin constructor
         register(new EchoesEffect());
         register(new DisarrayEffect());
         register(new MatadorEffect());
-        register(new MotherHenEffect());
+
+        // FIX: schedule ownership must be OUR plugin
+        register(new MotherHenEffect(plugin));
+
         register(new ReductionEffect());
     }
 
