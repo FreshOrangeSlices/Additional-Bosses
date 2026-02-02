@@ -1,1 +1,198 @@
+# ===============================
+# Additional-Bosses
+# ===============================
 
+# ===============================
+# Boss Spawn Settings
+# ===============================
+spawn:
+  one_in: 250
+
+mobs:
+  whitelist:
+    - ZOMBIE
+    - SKELETON
+    - SPIDER
+    - HUSK
+    - STRAY
+
+# ===============================
+# Messaging
+# ===============================
+messages:
+  enabled: true
+  radius: 40
+  mode: "ACTIONBAR" # CHAT | ACTIONBAR | TITLE
+
+  spawn:
+    enabled: true
+    format: "&6A {rank_color}{title}{mob} &6wanders nearby..."
+
+  death:
+    enabled: true
+    format: "&aDefeated: {rank_color}{title}{mob} &e(+{rank_xp}x XP)"
+
+  despawn:
+    enabled: true
+    format: "&7Faded: {rank_color}{title}{mob}"
+
+# ===============================
+# Despawn Rules
+# ===============================
+despawn:
+  enabled: true
+  after_seconds: 120
+  only_if_no_players_within: 48
+  require_no_target: true
+
+# ===============================
+# Base Stat Defaults (fallback)
+# ===============================
+stats:
+  health_multiplier: 4.0
+  damage_multiplier: 1.5
+  speed_multiplier: 1.0
+
+# ===============================
+# Boss Nameplate (above mob)
+# ===============================
+boss:
+  name:
+    enabled: true
+    color: "&c"
+    text: ""  # blank = use mob name automatically
+
+# ===============================
+# Bossbar (Wither/Dragon style)
+# ===============================
+bossbar:
+  enabled: true
+  combat_only: true
+  combat_window_ms: 12000
+  radius: 40
+  update_ticks: 10
+
+  # defaults (rank can override)
+  color: "PURPLE"            # PINK, BLUE, RED, GREEN, YELLOW, PURPLE, WHITE
+  style: "SOLID"             # SOLID, SEGMENTED_6, SEGMENTED_10, SEGMENTED_12, SEGMENTED_20
+
+  title_format: "&6{rank_color}{title}{mob} &7[{affixes}]"
+  max_affixes_shown: 3
+
+# ===============================
+# Rewards (XP is handled in BossCombatListener)
+# ===============================
+rewards:
+  xp_multiplier: 1.0
+
+# ===============================
+# Ranks (weighted)
+# ===============================
+ranks:
+  common:
+    weight: 75
+    label: "Common"
+    color: "&7"
+    xp_multiplier: 1.0
+    max_affixes: 1
+    stats:
+      health_multiplier: 3.0
+      damage_multiplier: 1.2
+      speed_multiplier: 1.0
+    bossbar:
+      color: "WHITE"
+      style: "SOLID"
+
+  rare:
+    weight: 20
+    label: "Rare"
+    color: "&d"
+    xp_multiplier: 2.0
+    max_affixes: 2
+    stats:
+      health_multiplier: 4.0
+      damage_multiplier: 1.5
+      speed_multiplier: 1.05
+    bossbar:
+      color: "PURPLE"
+      style: "SEGMENTED_10"
+
+  mythic:
+    weight: 5
+    label: "Mythic"
+    color: "&c"
+    xp_multiplier: 3.0
+    max_affixes: 3
+    stats:
+      health_multiplier: 6.0
+      damage_multiplier: 1.9
+      speed_multiplier: 1.10
+    bossbar:
+      color: "RED"
+      style: "SEGMENTED_12"
+
+# ===============================
+# Affixes
+# ===============================
+affixes:
+  enabled: true
+  max_per_boss: 2
+
+  # Weighted pool (IDs must match what your code writes into PDC)
+  pool:
+    lifesteal:
+      weight: 4
+      name: "Lifesteal"
+
+    swift:
+      weight: 6
+      name: "Swift"
+
+    molten:
+      weight: 3
+      name: "Molten"
+
+    thorned:
+      weight: 4
+      name: "Thorned"
+
+# Boss title words mapped from affix IDs
+affix_titles:
+  lifesteal: "Vampiric"
+  swift: "Fleet"
+  molten: "Molten"
+  thorned: "Barbed"
+
+# ===============================
+# Raffle System
+# ===============================
+raffle:
+  debug: false
+
+  max_slots_per_armor: 4
+
+  require_token_mainhand: true
+  require_armor_offhand: true
+  cooldown_ms: 250
+
+  message:
+    success: "&dSomething shifts within the armor..."
+    fail_generic: "&c{reason}"
+
+  sound:
+    success:
+      enabled: true
+      key: "ENTITY_EXPERIENCE_ORB_PICKUP"
+      volume: 0.8
+      pitch: 1.2
+    fail:
+      enabled: true
+      key: "ENTITY_VILLAGER_NO"
+      volume: 0.7
+      pitch: 0.9
+
+  # Chance weighting for rolling effects (RafflePool reads this)
+  # Keep it simple for now: GOOD effects more common than CURSES.
+  pool:
+    good_weight: 70
+    curse_weight: 30
