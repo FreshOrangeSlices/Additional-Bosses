@@ -4,6 +4,7 @@ import com.orangeslices.additionalbosses.bosses.BossApplier;
 import com.orangeslices.additionalbosses.bosses.BossHealthBarManager;
 import com.orangeslices.additionalbosses.bosses.listeners.BossBarCombatListener;
 import com.orangeslices.additionalbosses.bosses.listeners.BossCombatListener;
+import com.orangeslices.additionalbosses.bosses.listeners.BossDespawnListener;
 import com.orangeslices.additionalbosses.bosses.listeners.BossDropListener;
 import com.orangeslices.additionalbosses.bosses.listeners.SpawnBossListener;
 import com.orangeslices.additionalbosses.commands.BecCommand;
@@ -122,6 +123,7 @@ public final class AdditionalBossesPlugin extends JavaPlugin {
         getServer().getPluginManager().registerEvents(new RaffleApplyListener(this), this);
 
         // Boss system
+        getServer().getPluginManager().registerEvents(new BossDespawnListener(this), this);
         getServer().getPluginManager().registerEvents(spawnBossListener, this);
         getServer().getPluginManager().registerEvents(new BossCombatListener(this), this);
         getServer().getPluginManager().registerEvents(new BossDropListener(this), this);
