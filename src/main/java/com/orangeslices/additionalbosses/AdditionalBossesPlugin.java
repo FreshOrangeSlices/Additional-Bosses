@@ -4,7 +4,6 @@ import com.orangeslices.additionalbosses.bosses.BossApplier;
 import com.orangeslices.additionalbosses.bosses.BossHealthBarManager;
 import com.orangeslices.additionalbosses.bosses.listeners.BossBarCombatListener;
 import com.orangeslices.additionalbosses.bosses.listeners.BossCombatListener;
-import com.orangeslices.additionalbosses.bosses.listeners.BossDespawnListener;
 import com.orangeslices.additionalbosses.bosses.listeners.BossDropListener;
 import com.orangeslices.additionalbosses.bosses.listeners.SpawnBossListener;
 import com.orangeslices.additionalbosses.commands.BecCommand;
@@ -18,15 +17,18 @@ import com.orangeslices.additionalbosses.raffle.RaffleTokenFactory;
 import com.orangeslices.additionalbosses.raffle.effects.RafflePotionEngine;
 import com.orangeslices.additionalbosses.raffle.effects.custom.MatadorKnockbackListener;
 import com.orangeslices.additionalbosses.raffle.effects.custom.RaffleCustomEffectEngine;
+import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Location;
 import org.bukkit.NamespacedKey;
 import org.bukkit.World;
+import org.bukkit.entity.Entity;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitTask;
 
+import java.util.Iterator;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -62,6 +64,10 @@ public final class AdditionalBossesPlugin extends JavaPlugin {
     private final Map<UUID, Integer> activeBossesByWorld = new ConcurrentHashMap<>();
     private final Map<UUID, BukkitTask> despawnTasks = new ConcurrentHashMap<>();
 
+    // Track bosses so we can cleanup even if removed without a death event
+    private final Map<UUID, UUID> bossWorldByBossId = new ConcurrentHashMap<>();
+    private BukkitTask bossCleanupTask;
+
     // Listener reference (spawn uses callbacks)
     private SpawnBossListener spawnBossListener;
 
@@ -76,7 +82,6 @@ public final class AdditionalBossesPlugin extends JavaPlugin {
 
     @Override
     public void onEnable() {
-        // Config LAST, but safe even if config is empty.
         saveDefaultConfig();
         reloadConfig();
 
@@ -119,23 +124,25 @@ public final class AdditionalBossesPlugin extends JavaPlugin {
         // -------------------------
         spawnBossListener = new SpawnBossListener(this);
 
-        // Raffle apply (armor system)
         getServer().getPluginManager().registerEvents(new RaffleApplyListener(this), this);
 
-        // Boss system
-        getServer().getPluginManager().registerEvents(new BossDespawnListener(this), this);
         getServer().getPluginManager().registerEvents(spawnBossListener, this);
         getServer().getPluginManager().registerEvents(new BossCombatListener(this), this);
         getServer().getPluginManager().registerEvents(new BossDropListener(this), this);
 
-        // Bossbar combat trigger (combat-only bossbar)
+        // Bossbar combat-only trigger
         getServer().getPluginManager().registerEvents(new BossBarCombatListener(this), this);
 
-        // Kits apply (sneak + right click)
+        // Kits
         getServer().getPluginManager().registerEvents(new KitApplyListener(this), this);
 
-        // Matador knockback (custom curse support)
+        // Matador knockback
         getServer().getPluginManager().registerEvents(new MatadorKnockbackListener(this), this);
+
+        // -------------------------
+        // Boss cleanup task (API-stable replacement for remove-from-world events)
+        // -------------------------
+        startBossCleanupTask();
 
         // -------------------------
         // Command
@@ -149,7 +156,11 @@ public final class AdditionalBossesPlugin extends JavaPlugin {
 
     @Override
     public void onDisable() {
-        // Stop bossbars first (removes from players)
+        if (bossCleanupTask != null) {
+            bossCleanupTask.cancel();
+            bossCleanupTask = null;
+        }
+
         if (bossHealthBars != null) {
             bossHealthBars.stopAll();
             bossHealthBars = null;
@@ -170,6 +181,7 @@ public final class AdditionalBossesPlugin extends JavaPlugin {
         }
         despawnTasks.clear();
         activeBossesByWorld.clear();
+        bossWorldByBossId.clear();
 
         getLogger().info("Additional-Bosses disabled.");
     }
@@ -243,7 +255,6 @@ public final class AdditionalBossesPlugin extends JavaPlugin {
                     net.md_5.bungee.api.chat.TextComponent.fromLegacyText(coloredMessage)
             );
         } catch (Throwable t) {
-            // Fallback
             player.sendMessage(coloredMessage);
         }
     }
@@ -254,14 +265,15 @@ public final class AdditionalBossesPlugin extends JavaPlugin {
     public void onBossCreated(LivingEntity boss) {
         if (boss == null || boss.getWorld() == null) return;
 
-        UUID w = boss.getWorld().getUID();
-        activeBossesByWorld.merge(w, 1, Integer::sum);
+        UUID worldId = boss.getWorld().getUID();
+        activeBossesByWorld.merge(worldId, 1, Integer::sum);
+
+        bossWorldByBossId.put(boss.getUniqueId(), worldId);
 
         if (spawnBossListener != null) {
             spawnBossListener.onBossCreated(boss);
         }
 
-        // Track for bossbar system (combat-only bar will not show until combat happens)
         if (bossHealthBars != null) {
             bossHealthBars.trackBoss(boss);
         }
@@ -270,9 +282,11 @@ public final class AdditionalBossesPlugin extends JavaPlugin {
     public void onBossRemoved(LivingEntity boss) {
         if (boss == null || boss.getWorld() == null) return;
 
-        UUID w = boss.getWorld().getUID();
-        activeBossesByWorld.compute(w, (k, v) -> Math.max(0, (v == null ? 0 : v) - 1));
+        UUID worldId = boss.getWorld().getUID();
+        activeBossesByWorld.compute(worldId, (k, v) -> Math.max(0, (v == null ? 0 : v) - 1));
         cancelBossDespawn(boss.getUniqueId());
+
+        bossWorldByBossId.remove(boss.getUniqueId());
 
         if (bossHealthBars != null) {
             bossHealthBars.stopFor(boss);
@@ -292,5 +306,35 @@ public final class AdditionalBossesPlugin extends JavaPlugin {
     public void cancelBossDespawn(UUID bossId) {
         BukkitTask old = despawnTasks.remove(bossId);
         if (old != null) old.cancel();
+    }
+
+    // ===============================
+    // Cleanup task (replaces remove-from-world events)
+    // ===============================
+    private void startBossCleanupTask() {
+        int periodTicks = Math.max(40, getConfig().getInt("cleanup.boss_check_ticks", 200)); // default 10s
+        bossCleanupTask = Bukkit.getScheduler().runTaskTimer(this, () -> {
+            Iterator<Map.Entry<UUID, UUID>> it = bossWorldByBossId.entrySet().iterator();
+            while (it.hasNext()) {
+                Map.Entry<UUID, UUID> e = it.next();
+
+                UUID bossId = e.getKey();
+                UUID worldId = e.getValue();
+
+                Entity ent = Bukkit.getEntity(bossId);
+                if (!(ent instanceof LivingEntity live) || !ent.isValid() || live.isDead()) {
+                    // boss vanished -> cleanup by IDs
+                    it.remove();
+
+                    activeBossesByWorld.compute(worldId, (k, v) -> Math.max(0, (v == null ? 0 : v) - 1));
+                    cancelBossDespawn(bossId);
+
+                    if (bossHealthBars != null) {
+                        // requires BossHealthBarManager.stopForId(UUID)
+                        bossHealthBars.stopForId(bossId);
+                    }
+                }
+            }
+        }, periodTicks, periodTicks);
     }
 }
