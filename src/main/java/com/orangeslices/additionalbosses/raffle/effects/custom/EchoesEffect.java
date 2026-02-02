@@ -17,15 +17,20 @@ import java.util.concurrent.ConcurrentHashMap;
  * ECHOES curse
  *
  * Auditory hallucinations around the player.
- * Purely atmospheric, player-local.
+ * Player-local (only the cursed player hears them).
  */
 public final class EchoesEffect implements RaffleCustomEffect {
 
     private static final int RUN_TICKS = 20 * 10; // ~10s
     private static final int PERIOD_TICKS = 20;   // 1s
 
+    private final JavaPlugin plugin;
     private final Random rng = new Random();
     private final Map<UUID, BukkitTask> tasks = new ConcurrentHashMap<>();
+
+    public EchoesEffect(JavaPlugin plugin) {
+        this.plugin = plugin;
+    }
 
     @Override
     public RaffleEffectId getId() {
@@ -44,21 +49,17 @@ public final class EchoesEffect implements RaffleCustomEffect {
         UUID id = player.getUniqueId();
         if (tasks.containsKey(id)) return; // already active
 
-        JavaPlugin plugin = JavaPlugin.getProvidingPlugin(getClass());
-
         BukkitTask task = Bukkit.getScheduler().runTaskTimer(
                 plugin,
                 () -> {
                     Player p = Bukkit.getPlayer(id);
                     if (p == null || !p.isOnline()) {
-                        // stop if player is gone
                         BukkitTask t = tasks.remove(id);
                         if (t != null) t.cancel();
                         return;
                     }
 
-                    Location loc = p.getLocation().clone();
-                    loc.add(
+                    Location loc = p.getLocation().clone().add(
                             rng.nextInt(11) - 5,
                             0,
                             rng.nextInt(11) - 5
@@ -72,7 +73,8 @@ public final class EchoesEffect implements RaffleCustomEffect {
                         default -> Sound.ENTITY_WITCH_AMBIENT;
                     };
 
-                    p.getWorld().playSound(loc, s, 0.35f, 0.9f);
+                    // FIX: player-local sound (only cursed player hears it)
+                    p.playSound(loc, s, 0.35f, 0.9f);
                 },
                 0L,
                 PERIOD_TICKS
