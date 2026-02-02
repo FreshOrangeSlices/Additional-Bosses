@@ -14,9 +14,11 @@ import java.util.*;
  * Engine for NON-potion raffle effects (curses & custom mechanics).
  *
  * Key behavior:
- * - GOOD custom effects (future) may apply repeatedly if desired
  * - CURSES trigger ONCE when they become active
  * - clear() is called when the effect disappears
+ *
+ * GeckoGrip:
+ * - runs on a fast tick, but ONLY for players who actually have it active
  *
  * DEFENSIVE GUARANTEE:
  * - Even if a cursed item ends up on the wrong armor slot,
@@ -25,13 +27,21 @@ import java.util.*;
 public final class RaffleCustomEffectEngine {
 
     private final AdditionalBossesPlugin plugin;
-    private BukkitTask task;
+
+    // slow scan task (detects active effects)
+    private BukkitTask scanTask;
+
+    // fast tick task (runs only for GeckoGrip-active players)
+    private BukkitTask tickTask;
 
     // Registered custom effects (permanent registry)
     private final Map<RaffleEffectId, RaffleCustomEffect> registry = new HashMap<>();
 
     // Tracks which effects are currently active per player
     private final Map<UUID, Set<RaffleEffectId>> activeByPlayer = new HashMap<>();
+
+    // Cache: GeckoGrip level per player (only players who currently have it)
+    private final Map<UUID, Integer> geckoLevel = new HashMap<>();
 
     public RaffleCustomEffectEngine(AdditionalBossesPlugin plugin) {
         this.plugin = plugin;
@@ -42,11 +52,7 @@ public final class RaffleCustomEffectEngine {
         register(new TerrorEffect());
         register(new DreadEffect());
 
-        // BENCHED:
-        // register(new MisstepEffect());
-        // register(new UneaseEffect());
-
-        register(new GeckoGripEffect()); // leave as-is unless you add a plugin constructor
+        register(new GeckoGripEffect());
         register(new EchoesEffect());
         register(new DisarrayEffect());
         register(new MatadorEffect());
@@ -65,17 +71,43 @@ public final class RaffleCustomEffectEngine {
     public void start() {
         stop();
 
-        task = plugin.getServer().getScheduler().runTaskTimer(
+        // Slow scan: discover active effects (every 2s, unchanged)
+        scanTask = plugin.getServer().getScheduler().runTaskTimer(
                 plugin,
                 () -> plugin.getServer().getOnlinePlayers().forEach(this::refreshPlayer),
                 20L,
                 40L
         );
+
+        // Fast tick: ONLY run GeckoGrip for players who currently have it active
+        tickTask = plugin.getServer().getScheduler().runTaskTimer(
+                plugin,
+                () -> {
+                    if (geckoLevel.isEmpty()) return;
+
+                    RaffleCustomEffect fx = registry.get(RaffleEffectId.GECKO_GRIP);
+                    if (fx == null) return;
+
+                    for (Map.Entry<UUID, Integer> e : geckoLevel.entrySet()) {
+                        Player p = plugin.getServer().getPlayer(e.getKey());
+                        if (p == null || !p.isOnline()) continue;
+
+                        fx.apply(p, e.getValue());
+                    }
+                },
+                0L,
+                5L // responsive, still light
+        );
     }
 
     public void stop() {
-        if (task != null) task.cancel();
-        task = null;
+        if (scanTask != null) scanTask.cancel();
+        scanTask = null;
+
+        if (tickTask != null) tickTask.cancel();
+        tickTask = null;
+
+        geckoLevel.clear();
 
         // Cleanup all active effects
         for (Map.Entry<UUID, Set<RaffleEffectId>> entry : activeByPlayer.entrySet()) {
@@ -84,9 +116,7 @@ public final class RaffleCustomEffectEngine {
 
             for (RaffleEffectId id : entry.getValue()) {
                 RaffleCustomEffect effect = registry.get(id);
-                if (effect != null) {
-                    effect.clear(player);
-                }
+                if (effect != null) effect.clear(player);
             }
         }
 
@@ -111,9 +141,16 @@ public final class RaffleCustomEffectEngine {
             nowActive.add(e.getKey());
         }
 
+        // Update Gecko cache (so fast tick only runs for these players)
+        if (nowActive.contains(RaffleEffectId.GECKO_GRIP)) {
+            geckoLevel.put(uuid, highest.getOrDefault(RaffleEffectId.GECKO_GRIP, 1));
+        } else {
+            geckoLevel.remove(uuid);
+        }
+
         Set<RaffleEffectId> prev = activeByPlayer.getOrDefault(uuid, Collections.emptySet());
 
-        // Newly activated effects
+        // Newly activated effects (apply once)
         for (RaffleEffectId id : nowActive) {
             if (prev.contains(id)) continue;
 
@@ -124,14 +161,12 @@ public final class RaffleCustomEffectEngine {
             effect.apply(player, level);
         }
 
-        // Removed effects
+        // Removed effects (clear)
         for (RaffleEffectId id : prev) {
             if (nowActive.contains(id)) continue;
 
             RaffleCustomEffect effect = registry.get(id);
-            if (effect != null) {
-                effect.clear(player);
-            }
+            if (effect != null) effect.clear(player);
         }
 
         activeByPlayer.put(uuid, nowActive);
@@ -142,30 +177,5 @@ public final class RaffleCustomEffectEngine {
 
         Map<RaffleEffectId, Integer> map = RaffleEffectReader.readFromItem(armor);
 
-        for (Iterator<Map.Entry<RaffleEffectId, Integer>> it = map.entrySet().iterator(); it.hasNext(); ) {
-            Map.Entry<RaffleEffectId, Integer> e = it.next();
-
-            if (e.getKey().isCurse() && !isCurseCompatibleWithSlot(e.getKey(), slot)) {
-                it.remove();
-            }
-        }
-
-        RaffleEffectReader.mergeHighest(into, map);
-    }
-
-    /**
-     * Defensive curse slot rules.
-     * Must mirror RaffleService.
-     */
-    private boolean isCurseCompatibleWithSlot(RaffleEffectId id, EquipmentSlot slot) {
-        if (id == null || slot == null) return false;
-
-        return switch (id) {
-            case TERROR, REDUCTION -> slot == EquipmentSlot.HEAD;
-            case DREAD -> slot == EquipmentSlot.CHEST;
-            case MOTHER_HEN -> slot == EquipmentSlot.LEGS;
-            case MATADOR -> slot == EquipmentSlot.FEET;
-            default -> false;
-        };
-    }
-}
+        // Defensive curse slot rules
+        for (Iterator<Map.Entry<RaffleEffectId, Integer>> it = map.entrySet().iterator(); it
