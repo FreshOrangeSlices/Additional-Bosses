@@ -14,6 +14,7 @@ import com.orangeslices.additionalbosses.raffle.RaffleService;
 import com.orangeslices.additionalbosses.raffle.RaffleTokenFactory;
 import com.orangeslices.additionalbosses.raffle.effects.RafflePotionEngine;
 import com.orangeslices.additionalbosses.raffle.effects.custom.RaffleCustomEffectEngine;
+import com.orangeslices.additionalbosses.raffle.effects.custom.MatadorKnockbackListener;
 import org.bukkit.ChatColor;
 import org.bukkit.Location;
 import org.bukkit.NamespacedKey;
@@ -116,6 +117,12 @@ public final class AdditionalBossesPlugin extends JavaPlugin {
         // Kits apply (sneak + right click)
         getServer().getPluginManager().registerEvents(new KitApplyListener(this), this);
 
+        // Matador knockback (custom curse support)
+        getServer().getPluginManager().registerEvents(
+                new MatadorKnockbackListener(this),
+                this
+        );
+
         // -------------------------
         // Command
         // -------------------------
@@ -212,7 +219,6 @@ public final class AdditionalBossesPlugin extends JavaPlugin {
                     net.md_5.bungee.api.chat.TextComponent.fromLegacyText(coloredMessage)
             );
         } catch (Throwable t) {
-            // Fallback
             player.sendMessage(coloredMessage);
         }
     }
