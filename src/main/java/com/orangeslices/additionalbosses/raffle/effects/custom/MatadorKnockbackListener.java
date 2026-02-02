@@ -13,17 +13,17 @@ import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.util.Vector;
 
 /**
- * Makes Matador knockback reliable.
+ * Reliable knockback for Matador.
  *
- * Why: Zoglins don't consistently apply held-item enchant knockback.
- * Fix: apply a controlled velocity push when the tagged Matador Zoglin hits a player.
+ * Zoglins don't consistently apply held-item enchant knockback.
+ * So we apply a controlled push when a tagged Matador Zoglin hits a player.
  */
 public final class MatadorKnockbackListener implements Listener {
 
     private final NamespacedKey matadorBullKey;
 
-    // Tweak these if you want it meaner/softer
-    private static final double HORIZONTAL_STRENGTH = 1.15;
+    // tweak feel here
+    private static final double HORIZONTAL_STRENGTH = 1.10;
     private static final double VERTICAL_STRENGTH = 0.22;
 
     public MatadorKnockbackListener(AdditionalBossesPlugin plugin) {
@@ -31,7 +31,7 @@ public final class MatadorKnockbackListener implements Listener {
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
-    public void onBullHit(EntityDamageByEntityEvent event) {
+    public void onMatadorBullHit(EntityDamageByEntityEvent event) {
         Entity damager = event.getDamager();
         Entity victim = event.getEntity();
 
@@ -41,16 +41,12 @@ public final class MatadorKnockbackListener implements Listener {
         Byte tagged = bull.getPersistentDataContainer().get(matadorBullKey, PersistentDataType.BYTE);
         if (tagged == null || tagged != (byte) 1) return;
 
-        // Push player away from bull
         Vector dir = player.getLocation().toVector().subtract(bull.getLocation().toVector());
         if (dir.lengthSquared() < 0.0001) return;
 
         dir.normalize().multiply(HORIZONTAL_STRENGTH);
 
-        // Preserve some current Y but enforce a minimum pop
         double y = Math.max(player.getVelocity().getY(), VERTICAL_STRENGTH);
-
-        Vector knock = new Vector(dir.getX(), y, dir.getZ());
-        player.setVelocity(knock);
+        player.setVelocity(new Vector(dir.getX(), y, dir.getZ()));
     }
 }
