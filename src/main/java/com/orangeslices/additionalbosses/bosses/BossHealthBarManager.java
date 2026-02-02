@@ -15,11 +15,7 @@ import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
 import org.bukkit.scheduler.BukkitTask;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 public final class BossHealthBarManager {
@@ -27,14 +23,18 @@ public final class BossHealthBarManager {
     private final AdditionalBossesPlugin plugin;
     private final BossApplier bossApplier;
 
-    // bossId -> BossBar
-    private final Map<UUID, BossBar> bars = new ConcurrentHashMap<>();
-
-    // bossId -> updater task
-    private final Map<UUID, BukkitTask> tasks = new ConcurrentHashMap<>();
+    // bossId -> tracked state
+    private final Map<UUID, TrackedBoss> tracked = new ConcurrentHashMap<>();
 
     // bossId -> last combat timestamp (ms)
     private final Map<UUID, Long> lastCombatMs = new ConcurrentHashMap<>();
+
+    // single manager task
+    private BukkitTask tickTask;
+
+    // lightweight config snapshot (refresh every couple seconds)
+    private volatile long cfgNextRefreshAtMs = 0L;
+    private volatile ConfigSnapshot cfg = new ConfigSnapshot();
 
     public BossHealthBarManager(AdditionalBossesPlugin plugin, BossApplier bossApplier) {
         this.plugin = plugin;
@@ -55,46 +55,13 @@ public final class BossHealthBarManager {
     public void trackBoss(LivingEntity boss) {
         if (boss == null) return;
         if (!bossApplier.isBoss(boss)) return;
+        refreshConfigIfNeeded();
 
-        if (!plugin.getConfig().getBoolean("bossbar.enabled", true)) return;
+        if (!cfg.enabled) return;
 
         UUID id = boss.getUniqueId();
-        if (tasks.containsKey(id)) return; // already tracking
-
-        int period = Math.max(5, plugin.getConfig().getInt("bossbar.update_ticks", 10));
-        long combatWindowMs = plugin.getConfig().getLong("bossbar.combat_window_ms", 12000L);
-        double radius = plugin.getConfig().getDouble("bossbar.radius", 40.0);
-        boolean combatOnly = plugin.getConfig().getBoolean("bossbar.combat_only", true);
-
-        BukkitTask task = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
-            Entity ent = Bukkit.getEntity(id);
-            if (!(ent instanceof LivingEntity live) || !live.isValid() || live.isDead()) {
-                stopForInternal(id);
-                return;
-            }
-
-            // If disabled mid-run, clean up.
-            if (!plugin.getConfig().getBoolean("bossbar.enabled", true)) {
-                stopForInternal(id);
-                return;
-            }
-
-            if (combatOnly) {
-                long last = lastCombatMs.getOrDefault(id, 0L);
-                if (System.currentTimeMillis() - last > combatWindowMs) {
-                    // Out of combat: hide bar if present, keep tracking
-                    BossBar existing = bars.remove(id);
-                    if (existing != null) existing.removeAll();
-                    return;
-                }
-            }
-
-            BossBar bar = bars.computeIfAbsent(id, _id -> createBarFor(live));
-            updateBar(live, bar, radius);
-
-        }, 1L, period);
-
-        tasks.put(id, task);
+        tracked.computeIfAbsent(id, _id -> new TrackedBoss(_id));
+        ensureTaskRunning();
     }
 
     /** Stop tracking and remove bar for this boss entity. */
@@ -111,11 +78,16 @@ public final class BossHealthBarManager {
 
     /** Stop all boss bars and tasks. */
     public void stopAll() {
-        for (UUID id : new ArrayList<>(tasks.keySet())) {
-            stopForInternal(id);
+        if (tickTask != null) {
+            tickTask.cancel();
+            tickTask = null;
         }
-        tasks.clear();
-        bars.clear();
+
+        for (TrackedBoss tb : tracked.values()) {
+            if (tb.bar != null) tb.bar.removeAll();
+        }
+
+        tracked.clear();
         lastCombatMs.clear();
     }
 
@@ -123,14 +95,87 @@ public final class BossHealthBarManager {
     // Internals
     // ===============================
 
+    private void ensureTaskRunning() {
+        if (tickTask != null) return;
+
+        // run every 1 tick, but do per-boss work based on configured intervals
+        tickTask = Bukkit.getScheduler().runTaskTimer(plugin, this::tick, 1L, 1L);
+    }
+
+    private void tick() {
+        refreshConfigIfNeeded();
+
+        // If disabled mid-run, clean up and stop.
+        if (!cfg.enabled) {
+            stopAll();
+            return;
+        }
+
+        if (tracked.isEmpty()) {
+            if (tickTask != null) {
+                tickTask.cancel();
+                tickTask = null;
+            }
+            return;
+        }
+
+        long nowMs = System.currentTimeMillis();
+
+        // Iterate tracked bosses
+        for (UUID id : new ArrayList<>(tracked.keySet())) {
+            TrackedBoss tb = tracked.get(id);
+            if (tb == null) continue;
+
+            Entity ent = Bukkit.getEntity(id);
+            if (!(ent instanceof LivingEntity boss) || !boss.isValid() || boss.isDead()) {
+                stopForInternal(id);
+                continue;
+            }
+
+            // combat-only hide logic
+            if (cfg.combatOnly) {
+                long last = lastCombatMs.getOrDefault(id, 0L);
+                if (nowMs - last > cfg.combatWindowMs) {
+                    // out of combat: hide bar if present, keep tracking
+                    if (tb.bar != null) tb.bar.removeAll();
+                    tb.viewers.clear();
+                    tb.hidden = true;
+                    continue;
+                }
+            }
+
+            // ensure bar exists
+            if (tb.bar == null) {
+                tb.bar = createBarFor(boss);
+                tb.hidden = false;
+            } else if (tb.hidden) {
+                // coming back into combat; bar exists but has no viewers yet
+                tb.hidden = false;
+            }
+
+            // update title/progress on its own interval
+            if ((tb.tickCounter++ % cfg.updateTicks) == 0) {
+                updateTitleAndProgress(boss, tb.bar);
+            }
+
+            // refresh viewers less frequently
+            if ((tb.viewerCounter++ % cfg.viewerUpdateTicks) == 0) {
+                updateViewers(boss, tb, cfg.radius);
+            }
+        }
+    }
+
     private void stopForInternal(UUID id) {
-        BukkitTask t = tasks.remove(id);
-        if (t != null) t.cancel();
-
-        BossBar bar = bars.remove(id);
-        if (bar != null) bar.removeAll();
-
+        TrackedBoss tb = tracked.remove(id);
+        if (tb != null && tb.bar != null) {
+            tb.bar.removeAll();
+        }
         lastCombatMs.remove(id);
+
+        if (tracked.isEmpty() && tickTask != null) {
+            tickTask.cancel();
+            tickTask = null;
+        }
     }
 
     private BossBar createBarFor(LivingEntity boss) {
@@ -158,11 +203,11 @@ public final class BossHealthBarManager {
         BarColor color = safeBarColor(colorKey, BarColor.PURPLE);
         BarStyle style = safeBarStyle(styleKey, BarStyle.SOLID);
 
-        // Placeholder title (updated each tick)
+        // Placeholder title (updated by manager)
         return Bukkit.createBossBar("Boss", color, style);
     }
 
-    private void updateBar(LivingEntity boss, BossBar bar, double radius) {
+    private void updateTitleAndProgress(LivingEntity boss, BossBar bar) {
         // Title
         bar.setTitle(buildTitle(boss));
 
@@ -177,18 +222,41 @@ public final class BossHealthBarManager {
 
         double pct = Math.min(1.0, hp / max);
         bar.setProgress(Math.max(0.0, pct));
+    }
 
-        // Viewers (same world within radius)
+    private void updateViewers(LivingEntity boss, TrackedBoss tb, double radius) {
+        BossBar bar = tb.bar;
+        if (bar == null) return;
+
         World w = boss.getWorld();
         double r2 = radius * radius;
 
-        // Add/remove viewers
+        // Who SHOULD be viewing right now
+        Set<UUID> should = new HashSet<>();
         for (Player p : w.getPlayers()) {
-            boolean near = p.getLocation().distanceSquared(boss.getLocation()) <= r2;
-            boolean already = bar.getPlayers().contains(p);
+            if (p.getLocation().distanceSquared(boss.getLocation()) <= r2) {
+                should.add(p.getUniqueId());
+            }
+        }
 
-            if (near && !already) bar.addPlayer(p);
-            if (!near && already) bar.removePlayer(p);
+        // Add newly eligible viewers
+        for (UUID pid : should) {
+            if (tb.viewers.contains(pid)) continue;
+            Player p = Bukkit.getPlayer(pid);
+            if (p != null && p.isOnline()) {
+                bar.addPlayer(p);
+                tb.viewers.add(pid);
+            }
+        }
+
+        // Remove viewers who are no longer eligible
+        for (UUID pid : new ArrayList<>(tb.viewers)) {
+            if (should.contains(pid)) continue;
+            Player p = Bukkit.getPlayer(pid);
+            if (p != null) {
+                bar.removePlayer(p);
+            }
+            tb.viewers.remove(pid);
         }
     }
 
@@ -282,5 +350,53 @@ public final class BossHealthBarManager {
         } catch (IllegalArgumentException ignored) {
             return fallback;
         }
+    }
+
+    private void refreshConfigIfNeeded() {
+        long now = System.currentTimeMillis();
+        if (now < cfgNextRefreshAtMs) return;
+
+        // refresh snapshot every 2 seconds
+        cfgNextRefreshAtMs = now + 2000L;
+
+        ConfigSnapshot s = new ConfigSnapshot();
+        s.enabled = plugin.getConfig().getBoolean("bossbar.enabled", true);
+
+        s.updateTicks = Math.max(5, plugin.getConfig().getInt("bossbar.update_ticks", 10));
+
+        // new: viewer refresh ticks (slower by default)
+        s.viewerUpdateTicks = Math.max(5, plugin.getConfig().getInt("bossbar.viewer_update_ticks", 20));
+
+        s.combatWindowMs = plugin.getConfig().getLong("bossbar.combat_window_ms", 12000L);
+        s.radius = plugin.getConfig().getDouble("bossbar.radius", 40.0);
+        s.combatOnly = plugin.getConfig().getBoolean("bossbar.combat_only", true);
+
+        cfg = s;
+    }
+
+    // ===============================
+    // Small structs
+    // ===============================
+
+    private static final class TrackedBoss {
+        final UUID bossId;
+        BossBar bar;
+        final Set<UUID> viewers = new HashSet<>();
+        long tickCounter = 0;
+        long viewerCounter = 0;
+        boolean hidden = false;
+
+        TrackedBoss(UUID bossId) {
+            this.bossId = bossId;
+        }
+    }
+
+    private static final class ConfigSnapshot {
+        boolean enabled = true;
+        int updateTicks = 10;
+        int viewerUpdateTicks = 20;
+        long combatWindowMs = 12000L;
+        double radius = 40.0;
+        boolean combatOnly = true;
     }
 }
