@@ -4,6 +4,7 @@ import com.orangeslices.additionalbosses.raffle.RaffleEffectId;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
+import org.bukkit.NamespacedKey;
 import org.bukkit.Sound;
 import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.Entity;
@@ -12,6 +13,8 @@ import org.bukkit.entity.Zoglin;
 import org.bukkit.inventory.EntityEquipment;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.persistence.PersistentDataType;
+import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
 import org.bukkit.scheduler.BukkitTask;
@@ -23,9 +26,6 @@ import java.util.concurrent.ConcurrentHashMap;
 public final class MatadorEffect implements RaffleCustomEffect {
 
     private static final int DESPAWN_TICKS = 20 * 12; // ~12 seconds
-
-    // NOTE: Held-item knockback often does NOT apply for Zoglins.
-    // We'll add code-based knockback later if you want it 100% reliable.
     private static final int DISPLAY_KNOCKBACK_LEVEL = 3;
 
     private final Map<UUID, Entity> spawned = new ConcurrentHashMap<>();
@@ -46,9 +46,10 @@ public final class MatadorEffect implements RaffleCustomEffect {
         if (player == null || !player.isOnline()) return;
 
         UUID id = player.getUniqueId();
-
-        // One-time trigger while armor is worn
         if (spawned.containsKey(id)) return;
+
+        JavaPlugin plugin = JavaPlugin.getProvidingPlugin(getClass());
+        NamespacedKey matadorBullKey = new NamespacedKey(plugin, "matador_bull");
 
         Zoglin bull = player.getWorld().spawn(
                 player.getLocation().add(2, 0, 2),
@@ -57,67 +58,37 @@ public final class MatadorEffect implements RaffleCustomEffect {
                     z.setAdult();
                     z.setRemoveWhenFarAway(true);
                     z.setCanPickupItems(false);
+
+                    // Tag this Zoglin so the knockback listener can detect it
+                    z.getPersistentDataContainer().set(matadorBullKey, PersistentDataType.BYTE, (byte) 1);
                 }
         );
 
-        // Aggro immediately
         bull.setTarget(player);
 
-        // Speed I for lifetime (no particles / icon)
-        bull.addPotionEffect(new PotionEffect(
-                PotionEffectType.SPEED,
-                DESPAWN_TICKS,
-                0,
-                true,
-                false,
-                false
-        ));
+        // Speed I (no particles/icon)
+        bull.addPotionEffect(new PotionEffect(PotionEffectType.SPEED, DESPAWN_TICKS, 0, true, false, false));
 
-        // WEAKNESS so it deals little damage (I or II)
-        bull.addPotionEffect(new PotionEffect(
-                PotionEffectType.WEAKNESS,
-                DESPAWN_TICKS,
-                1, // Weakness II; change to 0 for Weakness I
-                true,
-                false,
-                false
-        ));
+        // Weakness so it does little damage
+        bull.addPotionEffect(new PotionEffect(PotionEffectType.WEAKNESS, DESPAWN_TICKS, 1, true, false, false));
 
-        // Optional: make it less oppressive (comment out if you want it scarier)
-        bull.addPotionEffect(new PotionEffect(
-                PotionEffectType.SLOWNESS,
-                DESPAWN_TICKS,
-                0, // Slowness I
-                true,
-                false,
-                false
-        ));
+        // Optional: slightly slower so it's not oppressive
+        bull.addPotionEffect(new PotionEffect(PotionEffectType.SLOWNESS, DESPAWN_TICKS, 0, true, false, false));
 
-        // Equip a "baton" purely for flavor (may not apply knockback in practice)
+        // Held item is flavor; knockback is handled by listener
         equipBaton(bull);
 
-        // Audio cue
-        player.getWorld().playSound(
-                player.getLocation(),
-                Sound.ENTITY_ZOGLIN_ANGRY,
-                0.9f,
-                0.9f
-        );
+        player.getWorld().playSound(player.getLocation(), Sound.ENTITY_ZOGLIN_ANGRY, 0.9f, 0.9f);
 
         spawned.put(id, bull);
 
-        // Despawn after duration
-        BukkitTask despawn = Bukkit.getScheduler().runTaskLater(
-                Bukkit.getPluginManager().getPlugins()[0],
-                () -> {
-                    Entity e = spawned.remove(id);
-                    if (e != null && e.isValid()) e.remove();
+        BukkitTask despawn = Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            Entity e = spawned.remove(id);
+            if (e != null && e.isValid()) e.remove();
 
-                    BukkitTask t = despawnTasks.remove(id);
-                    if (t != null) t.cancel();
-                },
-                DESPAWN_TICKS
-        );
+            BukkitTask t = despawnTasks.remove(id);
+            if (t != null) t.cancel();
+        }, DESPAWN_TICKS);
 
         despawnTasks.put(id, despawn);
     }
@@ -152,7 +123,6 @@ public final class MatadorEffect implements RaffleCustomEffect {
             eq.setItemInMainHand(stick);
             eq.setItemInMainHandDropChance(0.0f);
 
-            // Safety: no armor drops either
             eq.setHelmetDropChance(0.0f);
             eq.setChestplateDropChance(0.0f);
             eq.setLeggingsDropChance(0.0f);
