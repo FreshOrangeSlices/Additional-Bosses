@@ -50,7 +50,7 @@ public final class SpawnBossListener implements Listener {
 
         // START bossbar tracking (manager handles visibility + cleanup)
         // If your getter name differs, rename bossHealthBarManager() accordingly.
-        plugin.bossHealthBarManager().trackBoss(boss);
+        plugin.bossHealthBars().trackBoss(boss);
 
         // FX + messaging
         maybePlaySpawnFx(boss);
