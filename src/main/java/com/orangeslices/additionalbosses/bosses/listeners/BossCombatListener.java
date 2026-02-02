@@ -28,7 +28,7 @@ public final class BossCombatListener implements Listener {
         if (!plugin.bossApplier().isBoss(boss)) return;
 
         // If your getter name differs, rename bossHealthBarManager() accordingly.
-        plugin.bossHealthBarManager().markInCombat(boss);
+        plugin.bossHealthBars().markInCombat(boss);
     }
 
     @EventHandler
