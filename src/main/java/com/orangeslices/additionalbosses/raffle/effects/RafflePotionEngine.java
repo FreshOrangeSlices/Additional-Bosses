@@ -19,12 +19,11 @@ import java.util.Map;
  *
  * Mirrors the stable Potion Add-On approach:
  * - periodic refresh
- * - applyIfBetter()
  * - highest level across armor
  *
  * This engine is AUTHORITATIVE for raffle-applied potion effects:
- * - It will re-apply every refresh to keep them hidden (no HUD/inventory icons).
- * - It will not downgrade stronger external effects.
+ * - re-applies every refresh to keep them hidden (no HUD/inventory icons).
+ * - will not downgrade stronger external effects.
  *
  * Effect mappings live in RafflePotionTable (expandable).
  */
@@ -64,6 +63,14 @@ public final class RafflePotionEngine {
         } catch (Throwable ignored) {}
     }
 
+    /**
+     * Public "poke" for event-driven updates later (join/equip/respawn/etc).
+     * Safe to call anytime.
+     */
+    public void refreshPlayerNow(Player player) {
+        refreshPlayer(player);
+    }
+
     private void refreshPlayer(Player player) {
         if (player == null || !player.isOnline()) return;
 
@@ -74,6 +81,15 @@ public final class RafflePotionEngine {
         mergeArmor(highest, player.getInventory().getLeggings());
         mergeArmor(highest, player.getInventory().getBoots());
 
+        applyFromHighest(player, highest);
+    }
+
+    /**
+     * Allows reuse if you later cache the "highest" snapshot elsewhere.
+     */
+    public void applyFromHighest(Player player, Map<RaffleEffectId, Integer> highest) {
+        if (player == null || highest == null) return;
+
         for (RafflePotionTable.Entry entry : RafflePotionTable.entries()) {
             if (entry == null || entry.id == null || entry.potion == null) continue;
 
@@ -81,9 +97,7 @@ public final class RafflePotionEngine {
             if (level <= 0) continue;
 
             // Enforce non-leveling effects
-            if (!entry.canLevel) {
-                level = 1;
-            }
+            if (!entry.canLevel) level = 1;
 
             applyAuthoritative(player, entry.potion, level, entry.durationTicks, entry.canLevel);
         }
