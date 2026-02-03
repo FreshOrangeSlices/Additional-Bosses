@@ -18,7 +18,7 @@ import java.util.*;
  * - clear() is called when the effect disappears
  *
  * GeckoGrip:
- * - runs on a fast tick, but ONLY for players who actually have it active
+ * - runs on a fast tick, but ONLY while at least one player actually has it active
  *
  * DEFENSIVE GUARANTEE:
  * - Even if a cursed item ends up on the wrong armor slot,
@@ -31,7 +31,7 @@ public final class RaffleCustomEffectEngine {
     // slow scan task (detects active effects)
     private BukkitTask scanTask;
 
-    // fast tick task (runs only for GeckoGrip-active players)
+    // fast tick task (runs only while GeckoGrip is active for at least one player)
     private BukkitTask tickTask;
 
     // Registered custom effects (permanent registry)
@@ -82,35 +82,15 @@ public final class RaffleCustomEffectEngine {
                 40L
         );
 
-        // Fast tick: ONLY run GeckoGrip for players who currently have it active
-        tickTask = plugin.getServer().getScheduler().runTaskTimer(
-                plugin,
-                () -> {
-                    if (geckoLevel.isEmpty()) return;
-
-                    RaffleCustomEffect fx = registry.get(RaffleEffectId.GECKO_GRIP);
-                    if (fx == null) return;
-
-                    for (Map.Entry<UUID, Integer> e : geckoLevel.entrySet()) {
-                        Player p = plugin.getServer().getPlayer(e.getKey());
-                        if (p == null || !p.isOnline()) continue;
-
-                        fx.apply(p, e.getValue());
-                    }
-                },
-                0L,
-                5L // responsive, still light
-        );
+        // tickTask is now LAZY: only starts when geckoLevel becomes non-empty
+        tickTask = null;
     }
 
     public void stop() {
         if (scanTask != null) scanTask.cancel();
         scanTask = null;
 
-        if (tickTask != null) tickTask.cancel();
-        tickTask = null;
-
-        geckoLevel.clear();
+        stopGeckoTick();
 
         // Cleanup all active effects
         for (Map.Entry<UUID, Set<RaffleEffectId>> entry : activeByPlayer.entrySet()) {
@@ -124,6 +104,7 @@ public final class RaffleCustomEffectEngine {
         }
 
         activeByPlayer.clear();
+        geckoLevel.clear();
     }
 
     /**
@@ -159,6 +140,9 @@ public final class RaffleCustomEffectEngine {
             geckoLevel.remove(uuid);
         }
 
+        // Start/stop gecko ticking based on whether we have anyone active
+        ensureGeckoTickState();
+
         Set<RaffleEffectId> prev = activeByPlayer.getOrDefault(uuid, Collections.emptySet());
 
         // Newly activated effects (apply once)
@@ -181,6 +165,45 @@ public final class RaffleCustomEffectEngine {
         }
 
         activeByPlayer.put(uuid, nowActive);
+    }
+
+    private void ensureGeckoTickState() {
+        if (geckoLevel.isEmpty()) {
+            stopGeckoTick();
+            return;
+        }
+
+        if (tickTask != null) return;
+
+        // Create the fast tick ONLY when needed
+        tickTask = plugin.getServer().getScheduler().runTaskTimer(
+                plugin,
+                () -> {
+                    if (geckoLevel.isEmpty()) {
+                        stopGeckoTick();
+                        return;
+                    }
+
+                    RaffleCustomEffect fx = registry.get(RaffleEffectId.GECKO_GRIP);
+                    if (fx == null) return;
+
+                    // copy keys to avoid CME if a refresh happens mid-loop
+                    List<Map.Entry<UUID, Integer>> entries = new ArrayList<>(geckoLevel.entrySet());
+                    for (Map.Entry<UUID, Integer> e : entries) {
+                        Player p = plugin.getServer().getPlayer(e.getKey());
+                        if (p == null || !p.isOnline()) continue;
+
+                        fx.apply(p, e.getValue());
+                    }
+                },
+                0L,
+                5L // responsive, still light
+        );
+    }
+
+    private void stopGeckoTick() {
+        if (tickTask != null) tickTask.cancel();
+        tickTask = null;
     }
 
     private void mergeArmor(Map<RaffleEffectId, Integer> into, ItemStack armor, EquipmentSlot slot) {
