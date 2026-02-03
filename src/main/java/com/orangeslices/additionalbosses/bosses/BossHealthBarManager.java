@@ -3,6 +3,7 @@ package com.orangeslices.additionalbosses.bosses;
 import com.orangeslices.additionalbosses.AdditionalBossesPlugin;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
+import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.attribute.Attribute;
 import org.bukkit.attribute.AttributeInstance;
@@ -31,6 +32,7 @@ public final class BossHealthBarManager {
 
     // single manager task
     private BukkitTask tickTask;
+    private int taskPeriodTicks = 1; // current scheduler period (ticks)
 
     // lightweight config snapshot (refresh every couple seconds)
     private volatile long cfgNextRefreshAtMs = 0L;
@@ -89,6 +91,7 @@ public final class BossHealthBarManager {
 
         tracked.clear();
         lastCombatMs.clear();
+        taskPeriodTicks = 1;
     }
 
     // ===============================
@@ -96,14 +99,30 @@ public final class BossHealthBarManager {
     // ===============================
 
     private void ensureTaskRunning() {
-        if (tickTask != null) return;
+        // if nothing to track, don't run
+        if (tracked.isEmpty()) return;
 
-        // run every 1 tick, but do per-boss work based on configured intervals
-        tickTask = Bukkit.getScheduler().runTaskTimer(plugin, this::tick, 1L, 1L);
+        // Determine ideal scheduler period based on config.
+        // We run at the smallest interval so we can keep the same "tick counters" semantics.
+        int desiredPeriod = Math.max(1, Math.min(cfg.updateTicks, cfg.viewerUpdateTicks));
+
+        if (tickTask != null) {
+            if (desiredPeriod == taskPeriodTicks) return;
+
+            // Period changed (config reload) -> restart task at new frequency
+            tickTask.cancel();
+            tickTask = null;
+        }
+
+        taskPeriodTicks = desiredPeriod;
+        tickTask = Bukkit.getScheduler().runTaskTimer(plugin, this::tick, taskPeriodTicks, taskPeriodTicks);
     }
 
     private void tick() {
         refreshConfigIfNeeded();
+
+        // If config changed update/viewer periods, reschedule task.
+        ensureTaskRunning();
 
         // If disabled mid-run, clean up and stop.
         if (!cfg.enabled) {
@@ -121,14 +140,24 @@ public final class BossHealthBarManager {
 
         long nowMs = System.currentTimeMillis();
 
-        // Iterate tracked bosses
-        for (UUID id : new ArrayList<>(tracked.keySet())) {
-            TrackedBoss tb = tracked.get(id);
-            if (tb == null) continue;
+        // Iterate tracked bosses safely and remove dead entries
+        Iterator<Map.Entry<UUID, TrackedBoss>> it = tracked.entrySet().iterator();
+        while (it.hasNext()) {
+            Map.Entry<UUID, TrackedBoss> entry = it.next();
+            UUID id = entry.getKey();
+            TrackedBoss tb = entry.getValue();
+            if (tb == null) {
+                it.remove();
+                lastCombatMs.remove(id);
+                continue;
+            }
 
             Entity ent = Bukkit.getEntity(id);
             if (!(ent instanceof LivingEntity boss) || !boss.isValid() || boss.isDead()) {
-                stopForInternal(id);
+                // clean up
+                if (tb.bar != null) tb.bar.removeAll();
+                it.remove();
+                lastCombatMs.remove(id);
                 continue;
             }
 
@@ -140,6 +169,9 @@ public final class BossHealthBarManager {
                     if (tb.bar != null) tb.bar.removeAll();
                     tb.viewers.clear();
                     tb.hidden = true;
+                    // still advance counters so it behaves consistently
+                    tb.tickCounter += taskPeriodTicks;
+                    tb.viewerCounter += taskPeriodTicks;
                     continue;
                 }
             }
@@ -153,15 +185,30 @@ public final class BossHealthBarManager {
                 tb.hidden = false;
             }
 
-            // update title/progress on its own interval
-            if ((tb.tickCounter++ % cfg.updateTicks) == 0) {
+            // Advance counters in "ticks" (not runs), since our task might be >1 tick.
+            tb.tickCounter += taskPeriodTicks;
+            tb.viewerCounter += taskPeriodTicks;
+
+            // snapshot location once per boss per tick-run
+            Location bossLoc = boss.getLocation();
+
+            // update title/progress on its configured interval (in ticks)
+            if (tb.tickCounter >= cfg.updateTicks) {
+                tb.tickCounter = 0;
                 updateTitleAndProgress(boss, tb.bar);
             }
 
-            // refresh viewers less frequently
-            if ((tb.viewerCounter++ % cfg.viewerUpdateTicks) == 0) {
-                updateViewers(boss, tb, cfg.radius);
+            // refresh viewers on its configured interval (in ticks)
+            if (tb.viewerCounter >= cfg.viewerUpdateTicks) {
+                tb.viewerCounter = 0;
+                updateViewers(boss, bossLoc, tb, cfg.radius);
             }
+        }
+
+        // If we removed everything, stop the task
+        if (tracked.isEmpty() && tickTask != null) {
+            tickTask.cancel();
+            tickTask = null;
         }
     }
 
@@ -224,7 +271,7 @@ public final class BossHealthBarManager {
         bar.setProgress(Math.max(0.0, pct));
     }
 
-    private void updateViewers(LivingEntity boss, TrackedBoss tb, double radius) {
+    private void updateViewers(LivingEntity boss, Location bossLoc, TrackedBoss tb, double radius) {
         BossBar bar = tb.bar;
         if (bar == null) return;
 
@@ -234,7 +281,7 @@ public final class BossHealthBarManager {
         // Who SHOULD be viewing right now
         Set<UUID> should = new HashSet<>();
         for (Player p : w.getPlayers()) {
-            if (p.getLocation().distanceSquared(boss.getLocation()) <= r2) {
+            if (p.getLocation().distanceSquared(bossLoc) <= r2) {
                 should.add(p.getUniqueId());
             }
         }
@@ -250,13 +297,15 @@ public final class BossHealthBarManager {
         }
 
         // Remove viewers who are no longer eligible
-        for (UUID pid : new ArrayList<>(tb.viewers)) {
+        Iterator<UUID> vit = tb.viewers.iterator();
+        while (vit.hasNext()) {
+            UUID pid = vit.next();
             if (should.contains(pid)) continue;
             Player p = Bukkit.getPlayer(pid);
             if (p != null) {
                 bar.removePlayer(p);
             }
-            tb.viewers.remove(pid);
+            vit.remove();
         }
     }
 
@@ -382,8 +431,8 @@ public final class BossHealthBarManager {
         final UUID bossId;
         BossBar bar;
         final Set<UUID> viewers = new HashSet<>();
-        long tickCounter = 0;
-        long viewerCounter = 0;
+        int tickCounter = 0;        // counts ticks since last title/progress update
+        int viewerCounter = 0;      // counts ticks since last viewer update
         boolean hidden = false;
 
         TrackedBoss(UUID bossId) {
