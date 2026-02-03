@@ -197,11 +197,7 @@ raffle:
       key: "ENTITY_VILLAGER_NO"
       volume: 0.7
       pitch: 0.9
-
-  pool:
-    good_weight: 70
-    curse_weight: 30
-
+      
   effects:
     - VITALITY
     - IRON_WILL
