@@ -17,6 +17,8 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * MOTHER_HEN curse
  *
+ * Optimized: ONE repeating task per affected player.
+ *
  * Spawns baby chickens that:
  * - Follow the player
  * - Face the player
@@ -26,10 +28,16 @@ import java.util.concurrent.ConcurrentHashMap;
 public final class MotherHenEffect implements RaffleCustomEffect {
 
     private static final int COUNT = 10;
+
+    // spawn pacing: every 5 ticks (same as before)
     private static final int SPAWN_INTERVAL_TICKS = 5;
+
+    // effect duration: 12 seconds (same as before)
     private static final int DESPAWN_TICKS = 20 * 12;
 
-    private static final int FOLLOW_PERIOD_TICKS = 10;
+    // main loop runs every 10 ticks (same as old follow period)
+    private static final int LOOP_PERIOD_TICKS = 10;
+
     private static final double FOLLOW_SPEED = 0.22;
     private static final double TELEPORT_IF_FAR = 10.0;
     private static final double STOP_DISTANCE = 1.6;
@@ -41,9 +49,7 @@ public final class MotherHenEffect implements RaffleCustomEffect {
     private final JavaPlugin plugin;
 
     private final Map<UUID, List<Entity>> spawned = new ConcurrentHashMap<>();
-    private final Map<UUID, BukkitTask> despawnTasks = new ConcurrentHashMap<>();
-    private final Map<UUID, BukkitTask> followTasks = new ConcurrentHashMap<>();
-    private final Map<UUID, BukkitTask> spawnTasks = new ConcurrentHashMap<>();
+    private final Map<UUID, BukkitTask> tasks = new ConcurrentHashMap<>();
 
     public MotherHenEffect(JavaPlugin plugin) {
         this.plugin = Objects.requireNonNull(plugin, "plugin");
@@ -64,9 +70,9 @@ public final class MotherHenEffect implements RaffleCustomEffect {
         if (player == null || !player.isOnline()) return;
 
         UUID id = player.getUniqueId();
-        if (spawned.containsKey(id)) return;
+        if (tasks.containsKey(id)) return; // already running
 
-        List<Entity> list = new ArrayList<>();
+        List<Entity> list = new ArrayList<>(COUNT);
         spawned.put(id, list);
 
         player.getWorld().playSound(
@@ -76,111 +82,80 @@ public final class MotherHenEffect implements RaffleCustomEffect {
                 1.2f
         );
 
-        // Spawn chicks gradually
-        BukkitTask spawnTask = Bukkit.getScheduler().runTaskTimer(
-                plugin,
-                new Runnable() {
-                    int i = 0;
+        final long startTick = Bukkit.getCurrentTick();
 
-                    @Override
-                    public void run() {
-                        if (!player.isOnline() || i >= COUNT) {
-                            BukkitTask t = spawnTasks.remove(id);
-                            if (t != null) t.cancel();
-                            return;
-                        }
+        BukkitTask task = Bukkit.getScheduler().runTaskTimer(plugin, new Runnable() {
+            int spawnedCount = 0;
+            long nextSpawnTick = startTick; // spawn immediately
 
-                        Location base = player.getLocation();
-                        Location spawnLoc = base.clone().add(
-                                (i - COUNT / 2.0) * 0.25,
-                                0,
-                                0.6
-                        );
+            @Override
+            public void run() {
+                // expire / offline -> cleanup
+                if (!player.isOnline()) {
+                    cleanup(id);
+                    return;
+                }
 
-                        Chicken chick = player.getWorld().spawn(spawnLoc, Chicken.class, c -> {
-                            c.setBaby();
-                            c.setRemoveWhenFarAway(true);
-                        });
+                long nowTick = Bukkit.getCurrentTick();
+                if (nowTick - startTick >= DESPAWN_TICKS) {
+                    cleanup(id);
+                    return;
+                }
 
-                        list.add(chick);
+                // Spawn gradually (every SPAWN_INTERVAL_TICKS)
+                while (spawnedCount < COUNT && nowTick >= nextSpawnTick) {
+                    spawnChick(player, spawnedCount, list);
+                    spawnedCount++;
+                    nextSpawnTick += SPAWN_INTERVAL_TICKS;
+                }
 
-                        player.getWorld().playSound(
-                                player.getLocation(),
-                                Sound.ENTITY_CHICKEN_AMBIENT,
-                                0.25f,
-                                1.6f
-                        );
+                // Follow + face
+                Location pLoc = player.getLocation();
 
-                        i++;
+                Iterator<Entity> it = list.iterator();
+                while (it.hasNext()) {
+                    Entity e = it.next();
+                    if (!(e instanceof Chicken chick) || !chick.isValid()) {
+                        it.remove();
+                        continue;
                     }
-                },
-                0L,
-                SPAWN_INTERVAL_TICKS
-        );
 
-        spawnTasks.put(id, spawnTask);
+                    Location cLoc = chick.getLocation();
+                    double distSq = cLoc.distanceSquared(pLoc);
 
-        // Follow + face task
-        BukkitTask followTask = Bukkit.getScheduler().runTaskTimer(
-                plugin,
-                () -> {
-                    if (!player.isOnline()) return;
-
-                    List<Entity> ents = spawned.get(id);
-                    if (ents == null) return;
-
-                    Location pLoc = player.getLocation();
-
-                    Iterator<Entity> it = ents.iterator();
-                    while (it.hasNext()) {
-                        Entity e = it.next();
-                        if (!(e instanceof Chicken chick) || !chick.isValid()) {
-                            it.remove();
-                            continue;
-                        }
-
-                        Location cLoc = chick.getLocation();
-                        double distSq = cLoc.distanceSquared(pLoc);
-
-                        // Teleport back if too far
-                        if (distSq > TELEPORT_IF_FAR_SQ) {
-                            chick.teleport(
-                                    pLoc.clone().add(
-                                            random(-1.5, 1.5),
-                                            0,
-                                            random(-1.5, 1.5)
-                                    )
-                            );
-                            continue;
-                        }
-
-                        // Rotate to face player
-                        faceEntity(chick, pLoc);
-
-                        if (distSq <= STOP_DISTANCE_SQ) continue;
-
-                        Vector dir = pLoc.toVector().subtract(cLoc.toVector()).setY(0);
-                        if (dir.lengthSquared() < 0.001) continue;
-
-                        Vector vel = dir.normalize().multiply(FOLLOW_SPEED);
-                        vel.setY(chick.getVelocity().getY());
-                        chick.setVelocity(vel);
+                    // Teleport back if too far
+                    if (distSq > TELEPORT_IF_FAR_SQ) {
+                        chick.teleport(
+                                pLoc.clone().add(
+                                        random(-1.5, 1.5),
+                                        0,
+                                        random(-1.5, 1.5)
+                                )
+                        );
+                        continue;
                     }
-                },
-                0L,
-                FOLLOW_PERIOD_TICKS
-        );
 
-        followTasks.put(id, followTask);
+                    // Rotate to face player
+                    faceEntity(chick, pLoc);
 
-        // Auto cleanup
-        BukkitTask despawn = Bukkit.getScheduler().runTaskLater(
-                plugin,
-                () -> cleanup(id),
-                DESPAWN_TICKS
-        );
+                    if (distSq <= STOP_DISTANCE_SQ) continue;
 
-        despawnTasks.put(id, despawn);
+                    Vector dir = pLoc.toVector().subtract(cLoc.toVector()).setY(0);
+                    if (dir.lengthSquared() < 0.001) continue;
+
+                    Vector vel = dir.normalize().multiply(FOLLOW_SPEED);
+                    vel.setY(chick.getVelocity().getY());
+                    chick.setVelocity(vel);
+                }
+
+                // If we've spawned all and none remain, just end early
+                if (spawnedCount >= COUNT && list.isEmpty()) {
+                    cleanup(id);
+                }
+            }
+        }, 0L, LOOP_PERIOD_TICKS);
+
+        tasks.put(id, task);
     }
 
     @Override
@@ -188,16 +163,31 @@ public final class MotherHenEffect implements RaffleCustomEffect {
         if (player != null) cleanup(player.getUniqueId());
     }
 
+    private void spawnChick(Player player, int i, List<Entity> list) {
+        Location base = player.getLocation();
+        Location spawnLoc = base.clone().add(
+                (i - COUNT / 2.0) * 0.25,
+                0,
+                0.6
+        );
+
+        Chicken chick = player.getWorld().spawn(spawnLoc, Chicken.class, c -> {
+            c.setBaby();
+            c.setRemoveWhenFarAway(true);
+        });
+
+        list.add(chick);
+
+        player.getWorld().playSound(
+                player.getLocation(),
+                Sound.ENTITY_CHICKEN_AMBIENT,
+                0.25f,
+                1.6f
+        );
+    }
+
     private void cleanup(UUID id) {
-        BukkitTask t;
-
-        t = spawnTasks.remove(id);
-        if (t != null) t.cancel();
-
-        t = followTasks.remove(id);
-        if (t != null) t.cancel();
-
-        t = despawnTasks.remove(id);
+        BukkitTask t = tasks.remove(id);
         if (t != null) t.cancel();
 
         List<Entity> ents = spawned.remove(id);
