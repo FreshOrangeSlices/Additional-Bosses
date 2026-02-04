@@ -176,7 +176,7 @@ affix_titles:
 # ===============================
 raffle:
   debug: false
-  max_slots_per_armor: 4
+  max_slots_per_armor: 3
 
   require_token_mainhand: true
   require_armor_offhand: true
