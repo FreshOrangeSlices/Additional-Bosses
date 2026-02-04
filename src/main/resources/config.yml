@@ -99,7 +99,7 @@ rewards:
 # Ranks (weighted)
 # ===============================
 ranks:
-  common:
+  GRAY:
     weight: 75
     label: "Common"
     color: "&7"
@@ -113,7 +113,7 @@ ranks:
       color: "WHITE"
       style: "SOLID"
 
-  rare:
+  PURPLE:
     weight: 20
     label: "Rare"
     color: "&d"
@@ -127,7 +127,7 @@ ranks:
       color: "PURPLE"
       style: "SEGMENTED_10"
 
-  mythic:
+  GOLD:
     weight: 5
     label: "Mythic"
     color: "&c"
