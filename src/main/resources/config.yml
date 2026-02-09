@@ -103,7 +103,7 @@ rewards:
 # ===============================
 ranks:
   common:
-    weight: 60
+    weight: 45
     label: "Common"
     color: "&7"
     xp_multiplier: 25.0
@@ -117,7 +117,7 @@ ranks:
       style: "SOLID"
 
   green:
-    weight: 25
+    weight: 20
     label: "Uncommon"
     color: "&a"
     xp_multiplier: 50.0
@@ -131,7 +131,7 @@ ranks:
       style: "SEGMENTED_6"
 
   red:
-    weight: 10
+    weight: 15
     label: "Epic"
     color: "&c"
     xp_multiplier: 100.0
@@ -145,7 +145,7 @@ ranks:
       style: "SEGMENTED_10"
 
   rare:
-    weight: 4
+    weight: 15
     label: "Rare"
     color: "&d"
     xp_multiplier: 125.0
@@ -159,7 +159,7 @@ ranks:
       style: "SEGMENTED_10"
 
   mythic:
-    weight: 1
+    weight: 5
     label: "Mythic"
     color: "&6"
     xp_multiplier: 150.0
