@@ -67,6 +67,10 @@ public final class SpawnBossListener implements Listener {
     private boolean shouldBecomeBoss(LivingEntity mob) {
         FileConfiguration cfg = plugin.getConfig();
 
+        // Simple O(1) limiter: no scanning, just a counter check.
+        int cap = Math.max(0, cfg.getInt("spawn.max_active_per_world", 25));
+        if (cap > 0 && plugin.activeBossesInWorld(mob.getWorld()) >= cap) return false;
+
         int oneIn = Math.max(1, cfg.getInt("spawn.one_in", 250));
         if (ThreadLocalRandom.current().nextInt(oneIn) != 0) return false;
 
