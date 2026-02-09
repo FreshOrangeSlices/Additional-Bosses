@@ -136,7 +136,6 @@ public final class BecCommand implements CommandExecutor {
         }
 
         // Run normal boss pipeline
-        plugin.onBossCreated(mob);
         bossApplier.apply(mob);
 
         mob.playEffect(EntityEffect.ENTITY_POOF);
