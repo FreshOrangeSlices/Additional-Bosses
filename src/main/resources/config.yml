@@ -98,12 +98,15 @@ rewards:
 # ===============================
 # Ranks (weighted)
 # ===============================
+# ===============================
+# Ranks (weighted)
+# ===============================
 ranks:
-  GRAY:
-    weight: 75
+  common:
+    weight: 60
     label: "Common"
     color: "&7"
-    xp_multiplier: 1.0
+    xp_multiplier: 25.0
     max_affixes: 1
     stats:
       health_multiplier: 3.0
@@ -113,33 +116,62 @@ ranks:
       color: "WHITE"
       style: "SOLID"
 
-  PURPLE:
-    weight: 20
-    label: "Rare"
-    color: "&d"
-    xp_multiplier: 2.0
+  green:
+    weight: 25
+    label: "Uncommon"
+    color: "&a"
+    xp_multiplier: 50.0
+    max_affixes: 1
+    stats:
+      health_multiplier: 3.5
+      damage_multiplier: 1.3
+      speed_multiplier: 1.03
+    bossbar:
+      color: "GREEN"
+      style: "SEGMENTED_6"
+
+  red:
+    weight: 10
+    label: "Epic"
+    color: "&c"
+    xp_multiplier: 100.0
     max_affixes: 2
     stats:
-      health_multiplier: 4.0
-      damage_multiplier: 1.5
-      speed_multiplier: 1.05
+      health_multiplier: 4.75
+      damage_multiplier: 1.6
+      speed_multiplier: 1.06
+    bossbar:
+      color: "RED"
+      style: "SEGMENTED_10"
+
+  rare:
+    weight: 4
+    label: "Rare"
+    color: "&d"
+    xp_multiplier: 125.0
+    max_affixes: 2
+    stats:
+      health_multiplier: 5.5
+      damage_multiplier: 1.75
+      speed_multiplier: 1.08
     bossbar:
       color: "PURPLE"
       style: "SEGMENTED_10"
 
-  GOLD:
-    weight: 5
+  mythic:
+    weight: 1
     label: "Mythic"
-    color: "&c"
-    xp_multiplier: 3.0
+    color: "&6"
+    xp_multiplier: 150.0
     max_affixes: 3
     stats:
-      health_multiplier: 6.0
+      health_multiplier: 6.5
       damage_multiplier: 1.9
       speed_multiplier: 1.10
     bossbar:
-      color: "RED"
+      color: "YELLOW"
       style: "SEGMENTED_12"
+
 
 # ===============================
 # Affixes
