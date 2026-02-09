@@ -6,7 +6,7 @@
 # Boss Spawn Settings
 # ===============================
 spawn:
-  one_in: 250
+  one_in: 50
 
 mobs:
   whitelist:
