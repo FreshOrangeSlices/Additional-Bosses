@@ -49,12 +49,12 @@ public final class BossDropListener implements Listener {
 
     private void rollRaffleToken(World world, LivingEntity boss, String rankUpper) {
         double chance = switch (rankUpper) {
-            case "GRAY" -> 0.05;
-            case "GREEN" -> 0.08;
-            case "RED" -> 0.12;
-            case "PURPLE" -> 0.18;
-            case "GOLD" -> 0.25;
-            default -> 0.05;
+            case "GRAY" -> 0.15;
+            case "GREEN" -> 0.22;
+            case "RED" -> 0.30;
+            case "PURPLE" -> 0.35;
+            case "GOLD" -> 0.40;
+            default -> 0.15;
         };
 
         if (random.nextDouble() < chance) {
