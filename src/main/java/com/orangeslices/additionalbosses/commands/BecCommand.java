@@ -120,7 +120,6 @@ public final class BecCommand implements CommandExecutor {
         LivingEntity mob = (LivingEntity) world.spawnEntity(player.getLocation(), type);
 
         // Force boss + rank BEFORE normal pipeline
-        mob.getPersistentDataContainer().set(bossKey, PersistentDataType.BYTE, (byte) 1);
         mob.getPersistentDataContainer().set(rankKey, PersistentDataType.STRING, rank);
 
         // Optional forced affixes (csv)
