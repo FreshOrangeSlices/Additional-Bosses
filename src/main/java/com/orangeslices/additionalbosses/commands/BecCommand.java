@@ -135,8 +135,8 @@ public final class BecCommand implements CommandExecutor {
         }
 
         // Run normal boss pipeline
-        bossApplier.apply(mob);
-
+        plugin.createBoss(mob);
+        
         mob.playEffect(EntityEffect.ENTITY_POOF);
 
         player.sendMessage(ChatColor.GREEN + "Spawned " + rank + " boss " + type.name()
