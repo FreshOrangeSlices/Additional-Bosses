@@ -306,8 +306,20 @@ public final class AdditionalBossesPlugin extends JavaPlugin {
     public void cancelBossDespawn(UUID bossId) {
         BukkitTask old = despawnTasks.remove(bossId);
         if (old != null) old.cancel();
-    }
+  
+    public void createBoss(LivingEntity boss) {
+        if (boss == null || boss.getWorld() == null) return;
+        if (!boss.isValid() || boss.isDead()) return;
 
+    // Don't double-apply
+        if (bossApplier.isBoss(boss)) return;
+
+    // Apply rank/stats/name/etc
+        bossApplier.apply(boss);
+
+    // Reuse existing lifecycle tracking + spawn FX/despawn scheduling
+        onBossCreated(boss);
+}
     // ===============================
     // Cleanup task (replaces remove-from-world events)
     // ===============================
