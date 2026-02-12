@@ -27,16 +27,17 @@ public final class SpawnBossListener implements Listener {
     public void onMobSpawn(CreatureSpawnEvent event) {
         if (!(event.getEntity() instanceof LivingEntity mob)) return;
 
-        // Don’t double-apply
+    // Don’t double-apply
         if (plugin.bossApplier().isBoss(mob)) return;
 
-        // Optional: restrict to natural spawns only
-        // if (event.getSpawnReason() != CreatureSpawnEvent.SpawnReason.NATURAL) return;
+    // Optional: restrict to natural spawns only
+    // if (event.getSpawnReason() != CreatureSpawnEvent.SpawnReason.NATURAL) return;
 
         if (shouldBecomeBoss(mob)) {
             plugin.createBoss(mob);
-        }
     }
+}
+
 
     /**
      * Called by plugin.onBossCreated(boss) (plugin is the lifecycle source of truth).
