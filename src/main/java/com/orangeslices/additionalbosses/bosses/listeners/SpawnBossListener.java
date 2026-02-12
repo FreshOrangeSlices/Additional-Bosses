@@ -42,14 +42,7 @@ public final class SpawnBossListener implements Listener {
      */
     public void onBossCreated(LivingEntity boss) {
         if (boss == null || !boss.isValid() || boss.isDead()) return;
-
-        // Apply rank + stats + affixes + nameplate
-        plugin.bossApplier().apply(boss);
-
-        // START bossbar tracking (manager handles visibility + cleanup)
-        // If your getter name differs, rename bossHealthBarManager() accordingly.
-        plugin.bossHealthBars().trackBoss(boss);
-
+        
         // FX + messaging
         maybePlaySpawnFx(boss);
         maybeBroadcastSpawn(boss);
