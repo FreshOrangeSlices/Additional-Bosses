@@ -33,11 +33,9 @@ public final class SpawnBossListener implements Listener {
         // Optional: restrict to natural spawns only
         // if (event.getSpawnReason() != CreatureSpawnEvent.SpawnReason.NATURAL) return;
 
-        if (shouldBecomeBoss(mob)) {
-            onBossCreated(mob);
-        }
-    }
-
+            if (shouldBecomeBoss(mob)) {
+            plugin.createBoss(mob);
+}
     /**
      * Single source of truth:
      * turning a mob into a boss triggers all setup here.
