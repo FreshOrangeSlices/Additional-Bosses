@@ -33,16 +33,18 @@ public final class SpawnBossListener implements Listener {
         // Optional: restrict to natural spawns only
         // if (event.getSpawnReason() != CreatureSpawnEvent.SpawnReason.NATURAL) return;
 
-            if (shouldBecomeBoss(mob)) {
+        if (shouldBecomeBoss(mob)) {
             plugin.createBoss(mob);
-}
+        }
+    }
+
     /**
-     * Single source of truth:
-     * turning a mob into a boss triggers all setup here.
+     * Called by plugin.onBossCreated(boss) (plugin is the lifecycle source of truth).
+     * This listener only handles FX/messaging/despawn scheduling.
      */
     public void onBossCreated(LivingEntity boss) {
         if (boss == null || !boss.isValid() || boss.isDead()) return;
-        
+
         // FX + messaging
         maybePlaySpawnFx(boss);
         maybeBroadcastSpawn(boss);
